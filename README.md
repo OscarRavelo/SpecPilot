@@ -27,6 +27,8 @@ Developers on multi-person teams in large companies, where work arrives as small
 - **Measure** the cost and latency of every task.
 - Encourage the agent to **ask for context** when it's unsure, instead of guessing.
 
+- **Two cost modes:** *Standard* minimizes token usage to fit a typical ~$30/month dev plan (our pilot spent ~$300 in one month); *Max* uses the most powerful model when there's no token limit.
+
 ## Out of scope (for now)
 
 - Keeping the agent on track when the user interrupts mid-task.
