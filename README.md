@@ -4,6 +4,10 @@
 
 > 🚧 Early stage. I'm building this in public while learning AI engineering. Follow along on X: [@oscarravelo_ai](https://x.com/oscarravelo_ai)
 
+## Core principle: zero friction
+
+A developer clones SpecPilot into their project, answers a couple of setup questions, and starts working. No complex configuration.
+
 ## The problem
 
 On a real enterprise project, I piloted Spec-Driven Development with AI agents. Two developers shipped at roughly 10x our usual speed. But three problems kept coming up:
