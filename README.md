@@ -41,6 +41,8 @@ Tested on ~10 real tasks in a legacy ("spaghetti") codebase:
 
 ## Para después (ideas parked for later)
 
+- **v0.2 goal: Azure DevOps integration.** After a couple of setup questions, read work items, draft the spec from the PO's acceptance criteria, detect the Node version (front and back), and generate the best tests for that version.
+
 - Recovering the spec-driven flow after a mid-task interruption.
 - A GitHub Action that blocks PRs that fail the evals.
 - An MCP server for spec-driven development.
