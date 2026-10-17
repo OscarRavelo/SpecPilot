@@ -5,6 +5,7 @@ import { parseSpec, lintSpec } from './spec';
 import { listTasks, nextPhase, isBackward, transition, loadState, saveState } from './state';
 import type { TaskState } from './state';
 import { runGate } from './gates';
+import { parseLedger, checkLedger } from './ledger';
 
 const SPECS_DIR = 'specs';
 
@@ -13,6 +14,7 @@ const HELP = `Usage: specpilot <command> [options]
 Commands:
   init                    Install SpecPilot in the current project
   spec lint <file>        Check a spec's format
+  ledger check <task>     Check that every fact in the grill ledger cites a real source
   status                  Show each task's phase
   gate <task>             Check the current phase and, if it passes, move to the next one
   reopen <task> <phase>   Go back to an allowed earlier phase
@@ -48,6 +50,37 @@ function specLint(file: string | undefined): number {
 
   for (const { code, line, message } of errors) {
     console.error(`${file}:${line} ${code} ${message}`);
+  }
+  console.error(`${errors.length} ${errors.length === 1 ? 'error' : 'errors'}`);
+  return 1;
+}
+
+function ledgerCheck(taskId: string | undefined): number {
+  if (!taskId) {
+    console.error('Usage: specpilot ledger check <task>');
+    return 1;
+  }
+  const task = openTask(taskId);
+  if (!task) return 1;
+
+  const ledgerFile = path.join(task.taskDir, 'grill.md');
+  if (!fs.existsSync(ledgerFile)) {
+    console.error(`Missing ${ledgerFile}`);
+    return 1;
+  }
+  const ledgerText = fs.readFileSync(ledgerFile, 'utf8');
+  const specText = fs.readFileSync(path.join(task.taskDir, 'spec.md'), 'utf8');
+
+  const errors = checkLedger(ledgerText, specText, process.cwd());
+  if (errors.length === 0) {
+    const { facts } = parseLedger(ledgerText);
+    const citations = facts.reduce((total, fact) => total + fact.citations.length, 0);
+    console.log(`OK: ${taskId} ledger (${facts.length} facts, ${citations} citations checked)`);
+    return 0;
+  }
+
+  for (const { code, line, message } of errors) {
+    console.error(`${ledgerFile}:${line} ${code} ${message}`);
   }
   console.error(`${errors.length} ${errors.length === 1 ? 'error' : 'errors'}`);
   return 1;
@@ -131,6 +164,7 @@ function main([command, ...args]: string[]): number {
     return 1;
   }
   if (command === 'spec' && args[0] === 'lint') return specLint(args[1]);
+  if (command === 'ledger' && args[0] === 'check') return ledgerCheck(args[1]);
   if (command === 'status') return status();
   if (command === 'gate') return gate(args[0]);
   if (command === 'reopen') return reopen(args[0], args[1]);

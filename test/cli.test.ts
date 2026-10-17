@@ -16,7 +16,7 @@ describe('specpilot CLI', () => {
     const result = run('--help');
 
     expect(result.status).toBe(0);
-    for (const command of ['init', 'spec lint', 'gate', 'reopen', 'tdd', 'mutate', 'verify', 'report', 'status']) {
+    for (const command of ['init', 'spec lint', 'ledger check', 'gate', 'reopen', 'tdd', 'mutate', 'verify', 'report', 'status']) {
       expect(result.stdout).toContain(command);
     }
   });
@@ -174,5 +174,53 @@ describe('specpilot status / gate / reopen', () => {
     const result = runIn(project, 'reopen', 'TASK-101');
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Usage: specpilot reopen <task> <phase>');
+  });
+});
+
+describe('specpilot ledger check', () => {
+  const FIXTURE = path.join(__dirname, 'fixtures', 'project');
+  let project: string;
+  const ledgerFile = () => path.join(project, 'specs', 'TASK-102', 'grill.md');
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-ledger-'));
+    fs.cpSync(FIXTURE, project, { recursive: true });
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  test('a ledger whose citations hold exits 0 and says what it checked', () => {
+    const result = runIn(project, 'ledger', 'check', 'TASK-102');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('OK: TASK-102 ledger (5 facts, 6 citations checked)\n');
+  });
+
+  test('a broken citation is reported as file:line and exits 1', () => {
+    const text = fs.readFileSync(ledgerFile(), 'utf8');
+    fs.writeFileSync(ledgerFile(), text.replace('"export function updateUser("', '"export function updateUsers("'));
+
+    const result = runIn(project, 'ledger', 'check', 'TASK-102');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe(
+      `${path.join('specs', 'TASK-102', 'grill.md')}:16 CITE_SNIPPET_MISMATCH "export function updateUsers(" is not in src/routes/users.ts:9\n1 error\n`,
+    );
+  });
+
+  test('a task without grill.md exits 1', () => {
+    fs.rmSync(ledgerFile());
+    const result = runIn(project, 'ledger', 'check', 'TASK-102');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`Missing ${path.join('specs', 'TASK-102', 'grill.md')}`);
+  });
+
+  test('a missing task exits 1', () => {
+    const result = runIn(project, 'ledger', 'check', 'TASK-404');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('No task TASK-404');
+  });
+
+  test('ledger check without a task prints usage', () => {
+    const result = runIn(project, 'ledger', 'check');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Usage: specpilot ledger check <task>');
   });
 });

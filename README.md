@@ -62,8 +62,21 @@ type: endpoint-fields
 - And the user with id 42 has phone_number "+34623234321"
 ```
 
+The grill-me answers live next to the spec in `specs/<task-id>/grill.md` (start from [`templates/grill.md`](templates/grill.md)). Questions have a status (`open`, `answered`, or `assumption`, which needs `Approved: yes` from the human). Every fact must cite at least one source:
+
+```markdown
+## Facts
+
+- Users are updated by updateUser [repo:src/routes/users.ts:9 "export function updateUser("]
+- A successful update responds 200 [spec:AC-1]
+- Invalid phone numbers respond 400 with INVALID_PHONE [human:Q1]
+```
+
+`specpilot ledger check` verifies each citation: a repo file must exist inside the project, the lines must exist, and the snippet (at least 8 characters) must appear literally in those lines. An acceptance criterion must exist in the spec, and a cited question must be answered or an approved assumption. An invented citation fails.
+
 ```bash
 npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
+npx specpilot ledger check TASK-101              # check every citation in the grill ledger
 npx specpilot status                             # show each task's phase
 npx specpilot gate TASK-101                      # close the current phase if its gate passes
 npx specpilot reopen TASK-101 red                # go back (only plan→grill, mutation→red, verify→red)
@@ -78,8 +91,8 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 0 | Project setup: TypeScript, Jest, CLI skeleton, CI | ✅ Done | Type check and `npm test` green on Node 18/20/22; `specpilot --help` lists the commands |
 | 1 | Spec format and `spec lint` | ✅ Done | Valid and invalid fixtures give exact error codes and line numbers |
 | 2 | Task state machine: `status`, `gate`, `reopen` | ✅ Done | Every illegal phase move is rejected; state persists in `state.json` |
-| 3 | Grill ledger and citation checker | ⏳ Next | A real citation passes; a missing file, wrong line or altered snippet fails |
-| 4 | Grill-me skill, checklist and auditor subagent | — | A spec with a planted ambiguity cannot leave the grill phase |
+| 3 | Grill ledger and citation checker: `ledger check` | ✅ Done | A real citation passes; a missing file, wrong line or altered snippet fails |
+| 4 | Grill-me skill, checklist and auditor subagent | ⏳ Next | A spec with a planted ambiguity cannot leave the grill phase |
 | 5 | Phase hooks in Claude Code | — | Editing code before the red phase is blocked |
 | 6 | `tdd red` / `tdd green` with evidence | — | Red must fail on an assertion; tests cannot change after green |
 | 7 | `mutate`: Stryker plus targeted bugs | — | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |

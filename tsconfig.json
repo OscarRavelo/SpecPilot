@@ -7,8 +7,18 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node", "jest"],
-    "noEmit": true
+    "types": [
+      "node",
+      "jest"
+    ],
+    "noEmit": true,
+    "isolatedModules": true
   },
-  "include": ["src", "test"]
+  "include": [
+    "src",
+    "test"
+  ],
+  "exclude": [
+    "test/fixtures"
+  ]
 }
