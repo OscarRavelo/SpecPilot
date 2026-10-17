@@ -31,7 +31,7 @@ Developers on multi-person teams in large companies, where work arrives as small
 
 ## Harness
 
-Stack assumed in target projects: **React** front end, **Node** back end, **Jest** tests (versions depend on the project).
+Stack assumed in target projects: **React + TypeScript** front end, **Node + TypeScript** back end, **Jest** tests (versions depend on the project).
 
 SpecPilot is hybrid: the interactive phases run inside Claude Code (`.claude/` skills, subagents and hooks), while checks and metrics run in a Node CLI (`specpilot`, written in TypeScript) that works the same locally and in CI.
 
@@ -82,10 +82,10 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 4 | Grill-me skill, checklist and auditor subagent | — | A spec with a planted ambiguity cannot leave the grill phase |
 | 5 | Phase hooks in Claude Code | — | Editing code before the red phase is blocked |
 | 6 | `tdd red` / `tdd green` with evidence | — | Red must fail on an assertion; tests cannot change after green |
-| 7 | `mutate`: Stryker plus targeted bugs | — | A weak test fails the gate; a leftover bug is detected |
+| 7 | `mutate`: Stryker plus targeted bugs | — | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |
 | 8 | `verify` and the false "done" detector | — | A criterion with no test blocks the task and counts as a hallucination |
 | 9 | Cost and latency metrics, Standard/Max modes | — | A known transcript gives exact tokens and € |
-| 10 | `specpilot init` (zero friction) | — | Installs into sample React and Node projects; running it twice changes nothing |
+| 10 | `specpilot init` (zero friction) | — | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
 | 11 | Evaluation on ~10 real tasks | — | `specpilot report` fills the success table below |
 
 ## Development
