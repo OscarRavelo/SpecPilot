@@ -29,6 +29,24 @@ Developers on multi-person teams in large companies, where work arrives as small
 
 - **Two cost modes:** *Standard* minimizes token usage to fit a typical ~$30/month dev plan (our pilot spent ~$300 in one month); *Max* uses the most powerful model when there's no token limit.
 
+## Harness
+
+Stack assumed in target projects: **React** front end, **Node** back end, **Jest** tests (versions depend on the project).
+
+SpecPilot is hybrid: the interactive phases run inside Claude Code (`.claude/` skills, subagents and hooks), while checks and metrics run in a Node CLI (`specpilot`) that works the same locally and in CI.
+
+Every task moves through a strict state machine, and only the CLI can advance it when a phase's gate passes:
+
+`research → grill → plan → red → green → mutation → verify → done`
+
+- **Grill-me is a blocking gate.** The agent asks one question at a time until every checklist item (contract, validation, errors, data, auth, backwards compatibility, edge cases, what not to touch) has a source: the spec (`[spec:AC-2]`), the repo (`[repo:file:line "snippet"]`) or the human (`[human:Q7]`). Repo citations are checked mechanically, so an invented citation fails the gate. A clean-context auditor subagent then looks for gaps.
+- **Rule #1: TDD, then prove the tests.** Tests are written first and must fail on an assertion. After the code turns them green, bugs are injected (Stryker plus one targeted bug per acceptance criterion). The tests must catch them; the bugs are then removed and the code must match the green version byte for byte.
+- **Verify** reruns everything independently. If the agent says "done" and it isn't, the task is blocked and counted as a hallucination.
+
+```bash
+npx specpilot spec lint specs/TASK-101/spec.md   # available now
+```
+
 ## Out of scope (for now)
 
 - Keeping the agent on track when the user interrupts mid-task.

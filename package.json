@@ -1,0 +1,29 @@
+{
+  "name": "specpilot",
+  "version": "0.1.0-dev",
+  "description": "AI coding agents that work from specs, and get tested and measured before you trust them.",
+  "license": "MIT",
+  "bin": {
+    "specpilot": "bin/specpilot.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "templates"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "<rootDir>/test/**/*.test.js"
+    ]
+  },
+  "devDependencies": {
+    "jest": "30.5.2"
+  }
+}
