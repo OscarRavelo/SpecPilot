@@ -1,14 +1,15 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { spawnSync } = require('child_process');
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { spawnSync } from 'child_process';
 
-const BIN = path.join(__dirname, '..', 'bin', 'specpilot.js');
+// Runs the compiled CLI, i.e. exactly what gets published (`npm test` builds first).
+const BIN = path.join(__dirname, '..', 'dist', 'cli.js');
 const SPECS = path.join(__dirname, 'fixtures', 'specs');
 
-const runIn = (cwd, ...args) =>
+const runIn = (cwd: string, ...args: string[]) =>
   spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', cwd });
-const run = (...args) => runIn(process.cwd(), ...args);
+const run = (...args: string[]) => runIn(process.cwd(), ...args);
 
 describe('specpilot CLI', () => {
   test('--help lists the v0.1 commands', () => {
@@ -72,11 +73,11 @@ describe('specpilot CLI', () => {
 });
 
 describe('specpilot status / gate / reopen', () => {
-  let project;
+  let project: string;
   const taskDir = () => path.join(project, 'specs', 'TASK-101');
   const phaseOf = () =>
     JSON.parse(fs.readFileSync(path.join(taskDir(), 'state.json'), 'utf8')).phase;
-  const writeState = (phase) =>
+  const writeState = (phase: string) =>
     fs.writeFileSync(
       path.join(taskDir(), 'state.json'),
       JSON.stringify({ taskId: 'TASK-101', phase, history: [] }),

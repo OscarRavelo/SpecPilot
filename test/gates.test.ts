@@ -1,7 +1,8 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { runGate } = require('../src/gates');
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { runGate } from '../src/gates';
+import type { Phase } from '../src/state';
 
 const VALID_SPEC = fs.readFileSync(
   path.join(__dirname, 'fixtures', 'specs', 'valid.md'),
@@ -9,7 +10,7 @@ const VALID_SPEC = fs.readFileSync(
 );
 
 describe('runGate', () => {
-  let dir;
+  let dir: string;
   beforeEach(() => {
     dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-gate-')), 'TASK-101');
     fs.mkdirSync(dir);
@@ -44,7 +45,7 @@ describe('runGate', () => {
     });
   });
 
-  test.each(['grill', 'plan', 'red', 'green', 'mutation', 'verify'])(
+  test.each<Phase>(['grill', 'plan', 'red', 'green', 'mutation', 'verify'])(
     'the not-yet-implemented %s gate never lets the task through',
     (phase) => {
       fs.writeFileSync(path.join(dir, 'spec.md'), VALID_SPEC);

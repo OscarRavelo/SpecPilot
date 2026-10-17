@@ -33,7 +33,7 @@ Developers on multi-person teams in large companies, where work arrives as small
 
 Stack assumed in target projects: **React** front end, **Node** back end, **Jest** tests (versions depend on the project).
 
-SpecPilot is hybrid: the interactive phases run inside Claude Code (`.claude/` skills, subagents and hooks), while checks and metrics run in a Node CLI (`specpilot`) that works the same locally and in CI.
+SpecPilot is hybrid: the interactive phases run inside Claude Code (`.claude/` skills, subagents and hooks), while checks and metrics run in a Node CLI (`specpilot`, written in TypeScript) that works the same locally and in CI.
 
 Every task moves through a strict state machine, and only the CLI can advance it when a phase's gate passes:
 
@@ -75,7 +75,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 
 | # | Step | Status | How it is checked |
 |---|---|---|---|
-| 0 | Project setup: Jest, CLI skeleton, CI | ✅ Done | `npm test` green on Node 18/20/22; `specpilot --help` lists the commands |
+| 0 | Project setup: TypeScript, Jest, CLI skeleton, CI | ✅ Done | Type check and `npm test` green on Node 18/20/22; `specpilot --help` lists the commands |
 | 1 | Spec format and `spec lint` | ✅ Done | Valid and invalid fixtures give exact error codes and line numbers |
 | 2 | Task state machine: `status`, `gate`, `reopen` | ✅ Done | Every illegal phase move is rejected; state persists in `state.json` |
 | 3 | Grill ledger and citation checker | ⏳ Next | A real citation passes; a missing file, wrong line or altered snippet fails |
@@ -90,9 +90,12 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 
 ## Development
 
+SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
+
 ```bash
 npm install
-npm test
+npm run typecheck   # tsc over src/ and test/
+npm test            # builds dist/ and runs Jest
 ```
 
 ## Out of scope (for now)

@@ -1,11 +1,19 @@
-const fs = require('fs');
-const path = require('path');
-const { parseSpec, lintSpec } = require('./spec');
+import fs from 'fs';
+import path from 'path';
+import { parseSpec, lintSpec } from './spec';
+import type { Phase } from './state';
 
-const pass = () => ({ ok: true, reasons: [] });
-const fail = (...reasons) => ({ ok: false, reasons });
+export interface GateResult {
+  ok: boolean;
+  reasons: string[];
+}
 
-function researchGate(taskDir) {
+type Gate = (taskDir: string) => GateResult;
+
+const pass = (): GateResult => ({ ok: true, reasons: [] });
+const fail = (...reasons: string[]): GateResult => ({ ok: false, reasons });
+
+function researchGate(taskDir: string): GateResult {
   const file = path.join(taskDir, 'spec.md');
   if (!fs.existsSync(file)) return fail(`Missing ${file}`);
 
@@ -23,16 +31,14 @@ function researchGate(taskDir) {
   return pass();
 }
 
-const GATES = {
+const GATES: Partial<Record<Phase, Gate>> = {
   research: researchGate,
 };
 
 // Checks whether the current phase can be closed. A phase without an implemented gate never passes.
-function runGate(taskDir, phase) {
+export function runGate(taskDir: string, phase: Phase): GateResult {
   if (phase === 'done') return fail('The task is already done');
   const gate = GATES[phase];
   if (!gate) return fail(`The ${phase} gate is not implemented yet`);
   return gate(taskDir);
 }
-
-module.exports = { runGate };

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
-const { parseSpec, lintSpec } = require('../src/spec');
-const { listTasks, nextPhase, isBackward, transition, loadState, saveState } = require('../src/state');
-const { runGate } = require('../src/gates');
+import fs from 'fs';
+import path from 'path';
+import { parseSpec, lintSpec } from './spec';
+import { listTasks, nextPhase, isBackward, transition, loadState, saveState } from './state';
+import type { TaskState } from './state';
+import { runGate } from './gates';
 
 const SPECS_DIR = 'specs';
 
@@ -23,17 +24,17 @@ Commands:
 
 const NOT_IMPLEMENTED = ['init', 'tdd', 'mutate', 'verify', 'report'];
 
-function specLint(file) {
+function specLint(file: string | undefined): number {
   if (!file) {
     console.error('Usage: specpilot spec lint <file>');
     return 1;
   }
 
-  let text;
+  let text: string;
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch (err) {
-    console.error(`Cannot read ${file}: ${err.message}`);
+    console.error(`Cannot read ${file}: ${(err as Error).message}`);
     return 1;
   }
 
@@ -52,7 +53,7 @@ function specLint(file) {
   return 1;
 }
 
-function status() {
+function status(): number {
   const tasks = listTasks(SPECS_DIR);
   if (tasks.length === 0) {
     console.log(`No tasks in ${SPECS_DIR}/`);
@@ -64,7 +65,7 @@ function status() {
   return 0;
 }
 
-function openTask(taskId) {
+function openTask(taskId: string): { taskDir: string; state: TaskState } | null {
   const taskDir = path.join(SPECS_DIR, taskId);
   if (!fs.existsSync(taskDir)) {
     console.error(`No task ${taskId} (${taskDir})`);
@@ -73,7 +74,7 @@ function openTask(taskId) {
   return { taskDir, state: loadState(taskDir, taskId) };
 }
 
-function gate(taskId) {
+function gate(taskId: string | undefined): number {
   if (!taskId) {
     console.error('Usage: specpilot gate <task>');
     return 1;
@@ -89,13 +90,14 @@ function gate(taskId) {
     return 1;
   }
 
-  const next = transition(state, nextPhase(state.phase));
+  // runGate never passes in "done", so there is always a next phase here.
+  const next = transition(state, nextPhase(state.phase) as string);
   saveState(taskDir, next);
   console.log(`${taskId}: ${state.phase} → ${next.phase}`);
   return 0;
 }
 
-function reopen(taskId, phase) {
+function reopen(taskId: string | undefined, phase: string | undefined): number {
   if (!taskId || !phase) {
     console.error('Usage: specpilot reopen <task> <phase>');
     return 1;
@@ -119,7 +121,7 @@ function reopen(taskId, phase) {
   return 0;
 }
 
-function main([command, ...args]) {
+function main([command, ...args]: string[]): number {
   if (command === '--help' || command === '-h') {
     console.log(HELP);
     return 0;
@@ -144,6 +146,6 @@ function main([command, ...args]) {
 try {
   process.exitCode = main(process.argv.slice(2));
 } catch (err) {
-  console.error(err.message);
+  console.error((err as Error).message);
   process.exitCode = 1;
 }

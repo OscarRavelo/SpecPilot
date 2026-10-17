@@ -1,14 +1,82 @@
-const TASK_TYPES = ['new-endpoint', 'endpoint-fields', 'react-component'];
+export const TASK_TYPES = ['new-endpoint', 'endpoint-fields', 'react-component'] as const;
+
+export type StepKind = 'given' | 'when' | 'then';
+
+export interface AcceptanceCriterion {
+  id: string;
+  title: string;
+  line: number;
+  given: string[];
+  when: string[];
+  then: string[];
+}
+
+export interface Spec {
+  id: string | null;
+  type: string | null;
+  title: string | null;
+  acceptanceCriteria: AcceptanceCriterion[];
+}
+
+export type LintCode =
+  | 'SPEC_MISSING_FRONTMATTER'
+  | 'SPEC_MISSING_ID'
+  | 'SPEC_MISSING_TYPE'
+  | 'SPEC_INVALID_TYPE'
+  | 'SPEC_MISSING_TITLE'
+  | 'SPEC_NO_AC'
+  | 'SPEC_AC_BAD_ID'
+  | 'SPEC_DUPLICATE_AC'
+  | 'SPEC_AC_INCOMPLETE'
+  | 'SPEC_AC_ORPHAN_AND';
+
+export interface LintError {
+  code: LintCode;
+  line: number;
+  message: string;
+}
+
+interface FrontmatterField {
+  value: string;
+  line: number;
+}
+
+interface Frontmatter {
+  fields: Record<string, FrontmatterField>;
+  end: number;
+}
+
+interface ScannedCriterion extends Partial<Record<StepKind, string[]>> {
+  id: string;
+  title: string;
+  line: number;
+  lastStep: StepKind | null;
+  orphanAnds: number[];
+}
+
+interface BadHeading {
+  title: string;
+  line: number;
+}
+
+interface Scan {
+  frontmatter: Frontmatter | null;
+  title: string | null;
+  criteria: ScannedCriterion[];
+  badHeadings: BadHeading[];
+}
+
+const STEP_KINDS: StepKind[] = ['given', 'when', 'then'];
 const AC_SECTION = /^##\s+Acceptance criteria\s*$/i;
 const AC_HEADING = /^###\s+(AC-\d+):\s*(.+?)\s*$/;
 const STEP = /^-\s+(Given|When|Then|And)\s+(.+?)\s*$/;
 
-function parseFrontmatter(lines) {
+function parseFrontmatter(lines: string[]): Frontmatter | null {
   if (lines[0] !== '---') return null;
   const end = lines.indexOf('---', 1);
   if (end === -1) return null;
 
-  const fields = {};
+  const fields: Record<string, FrontmatterField> = {};
   for (let i = 1; i < end; i++) {
     const match = lines[i].match(/^(\w+):\s*(.*?)\s*$/);
     if (match) fields[match[1]] = { value: match[2], line: i + 1 };
@@ -17,14 +85,14 @@ function parseFrontmatter(lines) {
 }
 
 // Walks the spec once and returns both the parsed result and the raw data lint needs.
-function scan(text) {
+function scan(text: string): Scan {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const frontmatter = parseFrontmatter(lines);
-  const criteria = [];
-  const badHeadings = [];
-  let title = null;
+  const criteria: ScannedCriterion[] = [];
+  const badHeadings: BadHeading[] = [];
+  let title: string | null = null;
   let inAcSection = false;
-  let current = null;
+  let current: ScannedCriterion | null = null;
 
   for (let i = frontmatter ? frontmatter.end + 1 : 0; i < lines.length; i++) {
     const line = lines[i];
@@ -50,7 +118,7 @@ function scan(text) {
       const step = line.match(STEP);
       if (step) {
         // "And" continues whichever step came before it: Given → Given, Then → Then.
-        const kind = step[1] === 'And' ? current.lastStep : step[1].toLowerCase();
+        const kind = step[1] === 'And' ? current.lastStep : (step[1].toLowerCase() as StepKind);
         if (kind) {
           current[kind] = [...(current[kind] || []), step[2]];
           current.lastStep = kind;
@@ -64,7 +132,7 @@ function scan(text) {
   return { frontmatter, title, criteria, badHeadings };
 }
 
-function parseSpec(text) {
+export function parseSpec(text: string): Spec {
   const { frontmatter, title, criteria } = scan(text);
   const fields = frontmatter ? frontmatter.fields : {};
 
@@ -83,10 +151,11 @@ function parseSpec(text) {
   };
 }
 
-function lintSpec(text) {
+export function lintSpec(text: string): LintError[] {
   const { frontmatter, title, criteria, badHeadings } = scan(text);
-  const errors = [];
-  const error = (code, line, message) => errors.push({ code, line, message });
+  const errors: LintError[] = [];
+  const error = (code: LintCode, line: number, message: string) =>
+    errors.push({ code, line, message });
 
   if (!frontmatter) {
     error('SPEC_MISSING_FRONTMATTER', 1, 'Missing frontmatter (--- id / type ---)');
@@ -95,7 +164,7 @@ function lintSpec(text) {
     if (!id || !id.value) error('SPEC_MISSING_ID', 1, 'Missing "id" in frontmatter');
     if (!type || !type.value) {
       error('SPEC_MISSING_TYPE', 1, `Missing "type" in frontmatter. Use: ${TASK_TYPES.join(', ')}`);
-    } else if (!TASK_TYPES.includes(type.value)) {
+    } else if (!(TASK_TYPES as readonly string[]).includes(type.value)) {
       error(
         'SPEC_INVALID_TYPE',
         type.line,
@@ -110,8 +179,8 @@ function lintSpec(text) {
     error('SPEC_NO_AC', 1, 'No acceptance criteria (## Acceptance criteria / ### AC-1: ...)');
   }
 
-  const seen = new Set();
-  const findings = [
+  const seen = new Set<string>();
+  const findings: Array<{ ac?: ScannedCriterion; bad?: BadHeading; line: number }> = [
     ...criteria.map((ac) => ({ ac, line: ac.line })),
     ...badHeadings.map((bad) => ({ bad, line: bad.line })),
   ].sort((a, b) => a.line - b.line);
@@ -125,12 +194,13 @@ function lintSpec(text) {
       );
       continue;
     }
+    if (!ac) continue;
     if (seen.has(ac.id)) {
       error('SPEC_DUPLICATE_AC', line, `${ac.id} is duplicated`);
       continue;
     }
     seen.add(ac.id);
-    for (const step of ['given', 'when', 'then']) {
+    for (const step of STEP_KINDS) {
       if (!ac[step]) {
         const name = step[0].toUpperCase() + step.slice(1);
         error('SPEC_AC_INCOMPLETE', line, `${ac.id} has no ${name}`);
@@ -143,5 +213,3 @@ function lintSpec(text) {
 
   return errors;
 }
-
-module.exports = { TASK_TYPES, parseSpec, lintSpec };

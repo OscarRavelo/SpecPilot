@@ -1,11 +1,12 @@
-const fs = require('fs');
-const path = require('path');
-const { parseSpec, lintSpec } = require('../src/spec');
+import fs from 'fs';
+import path from 'path';
+import { parseSpec, lintSpec } from '../src/spec';
+import type { LintError } from '../src/spec';
 
-const fixture = (name) =>
+const fixture = (name: string) =>
   fs.readFileSync(path.join(__dirname, 'fixtures', 'specs', name), 'utf8');
 
-const codes = (errors) => errors.map((e) => e.code);
+const codes = (errors: LintError[]) => errors.map((e) => e.code);
 
 describe('parseSpec', () => {
   test('extracts id, type, title and acceptance criteria', () => {

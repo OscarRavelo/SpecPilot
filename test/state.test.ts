@@ -1,7 +1,7 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const {
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import {
   PHASES,
   createState,
   listTasks,
@@ -9,7 +9,8 @@ const {
   transition,
   loadState,
   saveState,
-} = require('../src/state');
+} from '../src/state';
+import type { Phase } from '../src/state';
 
 const NOW = new Date('2026-10-17T10:00:00.000Z');
 
@@ -63,7 +64,7 @@ describe('state machine', () => {
     ['done', 'research'],
     ['grill', 'research'],
   ])('rejects jumping from %s to %s', (from, to) => {
-    expect(() => transition({ taskId: 'T', phase: from, history: [] }, to, NOW)).toThrow(
+    expect(() => transition({ taskId: 'T', phase: from as Phase, history: [] }, to, NOW)).toThrow(
       `Cannot move from ${from} to ${to}`,
     );
   });
@@ -73,7 +74,7 @@ describe('state machine', () => {
     ['mutation', 'red'],
     ['verify', 'red'],
   ])('allows going back from %s to %s', (from, to) => {
-    const next = transition({ taskId: 'T', phase: from, history: [] }, to, NOW);
+    const next = transition({ taskId: 'T', phase: from as Phase, history: [] }, to, NOW);
     expect(next.phase).toBe(to);
     expect(next.history).toEqual([{ from, to, at: NOW.toISOString() }]);
   });
@@ -83,7 +84,7 @@ describe('state machine', () => {
     for (const from of PHASES) {
       for (const to of PHASES) {
         const allowed = to === nextPhase(from) || backward.includes(`${from}>${to}`);
-        const move = () => transition({ taskId: 'T', phase: from, history: [] }, to, NOW);
+        const move = () => transition({ taskId: 'T', phase: from as Phase, history: [] }, to, NOW);
         if (allowed) expect(move).not.toThrow();
         else expect(move).toThrow(`Cannot move from ${from} to ${to}`);
       }
@@ -105,7 +106,7 @@ describe('state machine', () => {
 });
 
 describe('state.json persistence', () => {
-  let dir;
+  let dir: string;
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-state-'));
   });
@@ -146,7 +147,7 @@ describe('state.json persistence', () => {
 });
 
 describe('listTasks', () => {
-  let dir;
+  let dir: string;
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-tasks-'));
   });
@@ -165,7 +166,8 @@ describe('listTasks', () => {
     const realReaddir = fs.readdirSync;
     jest
       .spyOn(fs, 'readdirSync')
-      .mockImplementation((...args) => realReaddir(...args).reverse());
+      .mockImplementation(((dir: fs.PathLike, options: { withFileTypes: true }) =>
+        realReaddir(dir, options).reverse()) as unknown as typeof fs.readdirSync);
 
     expect(listTasks(dir)).toEqual(['TASK-1', 'TASK-10', 'TASK-2']);
   });

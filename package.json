@@ -4,26 +4,32 @@
   "description": "AI coding agents that work from specs, and get tested and measured before you trust them.",
   "license": "MIT",
   "bin": {
-    "specpilot": "bin/specpilot.js"
+    "specpilot": "dist/cli.js"
   },
   "files": [
-    "bin",
-    "src",
+    "dist",
     "templates"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "test": "jest"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run build && jest"
   },
   "jest": {
+    "preset": "ts-jest",
     "testEnvironment": "node",
     "testMatch": [
-      "<rootDir>/test/**/*.test.js"
+      "<rootDir>/test/**/*.test.ts"
     ]
   },
   "devDependencies": {
-    "jest": "30.5.2"
+    "@types/jest": "30.0.0",
+    "@types/node": "18.19.130",
+    "jest": "30.5.2",
+    "ts-jest": "29.4.14",
+    "typescript": "6.0.3"
   }
 }
