@@ -43,13 +43,56 @@ Every task moves through a strict state machine, and only the CLI can advance it
 - **Rule #1: TDD, then prove the tests.** Tests are written first and must fail on an assertion. After the code turns them green, bugs are injected (Stryker plus one targeted bug per acceptance criterion). The tests must catch them; the bugs are then removed and the code must match the green version byte for byte.
 - **Verify** reruns everything independently. If the agent says "done" and it isn't, the task is blocked and counted as a hallucination.
 
-Each task lives in `specs/<task-id>/spec.md`. Acceptance criteria are written as `### AC-<n>: <title>` under `## Acceptance criteria`, with `- Given` / `- When` / `- Then` steps; `- And` continues the previous step.
+Each task lives in `specs/<task-id>/spec.md` (start from [`templates/spec.md`](templates/spec.md)). The `id` must match the folder name, and `type` is one of `new-endpoint`, `endpoint-fields` or `react-component`. Acceptance criteria are written as `### AC-<n>: <title>` under `## Acceptance criteria`, with `- Given` / `- When` / `- Then` steps; `- And` continues the previous step:
+
+```markdown
+---
+id: TASK-102
+type: endpoint-fields
+---
+# Update phone number on PUT /users/:id
+
+## Acceptance criteria
+
+### AC-1: Sets a phone number on a user that had none
+- Given a user with id 42 exists
+- And their phone_number is null
+- When I send PUT /users/42 with body {"phone_number": "+34623234321"}
+- Then the response status is 200
+- And the user with id 42 has phone_number "+34623234321"
+```
 
 ```bash
 npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
 npx specpilot status                             # show each task's phase
 npx specpilot gate TASK-101                      # close the current phase if its gate passes
 npx specpilot reopen TASK-101 red                # go back (only plan→grill, mutation→red, verify→red)
+```
+
+## v0.1 progress
+
+Every step is built with rule #1 on SpecPilot itself: tests first, then code, then injected bugs that the tests must catch.
+
+| # | Step | Status | How it is checked |
+|---|---|---|---|
+| 0 | Project setup: Jest, CLI skeleton, CI | ✅ Done | `npm test` green on Node 18/20/22; `specpilot --help` lists the commands |
+| 1 | Spec format and `spec lint` | ✅ Done | Valid and invalid fixtures give exact error codes and line numbers |
+| 2 | Task state machine: `status`, `gate`, `reopen` | ✅ Done | Every illegal phase move is rejected; state persists in `state.json` |
+| 3 | Grill ledger and citation checker | ⏳ Next | A real citation passes; a missing file, wrong line or altered snippet fails |
+| 4 | Grill-me skill, checklist and auditor subagent | — | A spec with a planted ambiguity cannot leave the grill phase |
+| 5 | Phase hooks in Claude Code | — | Editing code before the red phase is blocked |
+| 6 | `tdd red` / `tdd green` with evidence | — | Red must fail on an assertion; tests cannot change after green |
+| 7 | `mutate`: Stryker plus targeted bugs | — | A weak test fails the gate; a leftover bug is detected |
+| 8 | `verify` and the false "done" detector | — | A criterion with no test blocks the task and counts as a hallucination |
+| 9 | Cost and latency metrics, Standard/Max modes | — | A known transcript gives exact tokens and € |
+| 10 | `specpilot init` (zero friction) | — | Installs into sample React and Node projects; running it twice changes nothing |
+| 11 | Evaluation on ~10 real tasks | — | `specpilot report` fills the success table below |
+
+## Development
+
+```bash
+npm install
+npm test
 ```
 
 ## Out of scope (for now)
