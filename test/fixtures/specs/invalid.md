@@ -1,25 +1,25 @@
 ---
 type: microservice
 ---
-# Spec con varios errores
+# Spec with several errors
 
-## Criterios de aceptación
+## Acceptance criteria
 
-### AC-1: Primero
-- Given algo
-- When pasa algo
-- Then ocurre algo
+### AC-1: First
+- Given something
+- When something happens
+- Then something occurs
 
-### AC-1: Duplicado
-- Given algo
-- When pasa algo
-- Then ocurre algo
+### AC-1: Duplicate
+- Given something
+- When something happens
+- Then something occurs
 
-### Criterio sin id
-- Given algo
-- When pasa algo
-- Then ocurre algo
+### Criterion without id
+- Given something
+- When something happens
+- Then something occurs
 
-### AC-3: Sin Then
-- Given algo
-- When pasa algo
+### AC-3: Missing Then
+- Given something
+- When something happens

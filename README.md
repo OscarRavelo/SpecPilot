@@ -43,8 +43,13 @@ Every task moves through a strict state machine, and only the CLI can advance it
 - **Rule #1: TDD, then prove the tests.** Tests are written first and must fail on an assertion. After the code turns them green, bugs are injected (Stryker plus one targeted bug per acceptance criterion). The tests must catch them; the bugs are then removed and the code must match the green version byte for byte.
 - **Verify** reruns everything independently. If the agent says "done" and it isn't, the task is blocked and counted as a hallucination.
 
+Each task lives in `specs/<task-id>/spec.md`. Acceptance criteria are written as `### AC-<n>: <title>` under `## Acceptance criteria`, with `- Given` / `- When` / `- Then` steps; `- And` continues the previous step.
+
 ```bash
-npx specpilot spec lint specs/TASK-101/spec.md   # available now
+npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
+npx specpilot status                             # show each task's phase
+npx specpilot gate TASK-101                      # close the current phase if its gate passes
+npx specpilot reopen TASK-101 red                # go back (only plan→grill, mutation→red, verify→red)
 ```
 
 ## Out of scope (for now)
@@ -63,7 +68,7 @@ Tested on ~10 real tasks in a legacy ("spaghetti") codebase:
 | Useful questions | How often it asked for context instead of failing |
 | Cost per task | Average € spent per task |
 
-## Para después (ideas parked for later)
+## Later (parked ideas)
 
 - **v0.2 goal: Azure DevOps integration.** After a couple of setup questions, read work items, draft the spec from the PO's acceptance criteria, detect the Node version (front and back), and generate the best tests for that version.
 

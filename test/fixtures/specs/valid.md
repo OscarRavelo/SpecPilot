@@ -2,19 +2,19 @@
 id: TASK-101
 type: endpoint-fields
 ---
-# Añadir campo phone a POST /users
+# Add phone field to POST /users
 
-## Contexto
-El alta de usuarios debe aceptar un teléfono opcional.
+## Context
+User sign-up must accept an optional phone number.
 
-## Criterios de aceptación
+## Acceptance criteria
 
-### AC-1: Guarda el teléfono cuando viene en el payload
-- Given un payload válido con `phone: "+34600000000"`
-- When se hace POST /users
-- Then responde 201 y el usuario guardado incluye `phone`
+### AC-1: Stores the phone when present in the payload
+- Given a valid payload with `phone: "+34600000000"`
+- When POST /users is called
+- Then it responds 201 and the stored user includes `phone`
 
-### AC-2: Rechaza teléfonos con formato inválido
-- Given un payload con `phone: "abc"`
-- When se hace POST /users
-- Then responde 400 con `error.code = "INVALID_PHONE"`
+### AC-2: Rejects phones with an invalid format
+- Given a payload with `phone: "abc"`
+- When POST /users is called
+- Then it responds 400 with `error.code = "INVALID_PHONE"`

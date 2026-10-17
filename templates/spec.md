@@ -2,18 +2,18 @@
 id: TASK-000
 type: new-endpoint
 ---
-# Título corto de la tarea
+# Short task title
 
-## Contexto
-Qué se pide y por qué. Enlaza el work item si existe.
-Tipos válidos: new-endpoint, endpoint-fields, react-component.
+## Context
+What is being asked and why. Link the work item if there is one.
+Valid types: new-endpoint, endpoint-fields, react-component.
 
-## Fuera de alcance
-Lo que esta tarea NO debe tocar.
+## Out of scope
+What this task must NOT touch.
 
-## Criterios de aceptación
+## Acceptance criteria
 
-### AC-1: Comportamiento esperado
-- Given el estado inicial
-- When ocurre la acción
-- Then el resultado observable
+### AC-1: Expected behavior
+- Given the initial state
+- When the action happens
+- Then the observable result

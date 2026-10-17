@@ -1,8 +1,8 @@
-# Spec sin frontmatter
+# Spec without frontmatter
 
-## Criterios de aceptación
+## Acceptance criteria
 
-### AC-1: Algo
-- Given algo
-- When pasa algo
-- Then ocurre algo
+### AC-1: Something
+- Given something
+- When something happens
+- Then something occurs

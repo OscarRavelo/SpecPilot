@@ -1,7 +1,7 @@
 const TASK_TYPES = ['new-endpoint', 'endpoint-fields', 'react-component'];
-const AC_SECTION = /^##\s+Criterios de aceptación\s*$/i;
+const AC_SECTION = /^##\s+Acceptance criteria\s*$/i;
 const AC_HEADING = /^###\s+(AC-\d+):\s*(.+?)\s*$/;
-const STEP = /^-\s+(Given|When|Then)\s+(.+?)\s*$/;
+const STEP = /^-\s+(Given|When|Then|And)\s+(.+?)\s*$/;
 
 function parseFrontmatter(lines) {
   if (lines[0] !== '---') return null;
@@ -16,7 +16,7 @@ function parseFrontmatter(lines) {
   return { fields, end };
 }
 
-// Recorre la spec una vez y devuelve tanto el resultado como los datos crudos que necesita el lint.
+// Walks the spec once and returns both the parsed result and the raw data lint needs.
 function scan(text) {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const frontmatter = parseFrontmatter(lines);
@@ -40,7 +40,7 @@ function scan(text) {
     } else if (inAcSection && /^###\s+/.test(line)) {
       const match = line.match(AC_HEADING);
       if (match) {
-        current = { id: match[1], title: match[2], line: lineNumber };
+        current = { id: match[1], title: match[2], line: lineNumber, lastStep: null, orphanAnds: [] };
         criteria.push(current);
       } else {
         badHeadings.push({ title: line.replace(/^###\s+/, '').trim(), line: lineNumber });
@@ -48,7 +48,16 @@ function scan(text) {
       }
     } else if (current) {
       const step = line.match(STEP);
-      if (step) current[step[1].toLowerCase()] = step[2];
+      if (step) {
+        // "And" continues whichever step came before it: Given → Given, Then → Then.
+        const kind = step[1] === 'And' ? current.lastStep : step[1].toLowerCase();
+        if (kind) {
+          current[kind] = [...(current[kind] || []), step[2]];
+          current.lastStep = kind;
+        } else {
+          current.orphanAnds.push(lineNumber);
+        }
+      }
     }
   }
 
@@ -67,9 +76,9 @@ function parseSpec(text) {
       id: ac.id,
       title: ac.title,
       line: ac.line,
-      given: ac.given || null,
-      when: ac.when || null,
-      then: ac.then || null,
+      given: ac.given || [],
+      when: ac.when || [],
+      then: ac.then || [],
     })),
   };
 }
@@ -80,25 +89,25 @@ function lintSpec(text) {
   const error = (code, line, message) => errors.push({ code, line, message });
 
   if (!frontmatter) {
-    error('SPEC_MISSING_FRONTMATTER', 1, 'Falta el frontmatter (--- id / type ---)');
+    error('SPEC_MISSING_FRONTMATTER', 1, 'Missing frontmatter (--- id / type ---)');
   } else {
     const { id, type } = frontmatter.fields;
-    if (!id || !id.value) error('SPEC_MISSING_ID', 1, 'Falta "id" en el frontmatter');
+    if (!id || !id.value) error('SPEC_MISSING_ID', 1, 'Missing "id" in frontmatter');
     if (!type || !type.value) {
-      error('SPEC_MISSING_TYPE', 1, `Falta "type" en el frontmatter. Usa: ${TASK_TYPES.join(', ')}`);
+      error('SPEC_MISSING_TYPE', 1, `Missing "type" in frontmatter. Use: ${TASK_TYPES.join(', ')}`);
     } else if (!TASK_TYPES.includes(type.value)) {
       error(
         'SPEC_INVALID_TYPE',
         type.line,
-        `Tipo "${type.value}" no válido. Usa: ${TASK_TYPES.join(', ')}`,
+        `Invalid type "${type.value}". Use: ${TASK_TYPES.join(', ')}`,
       );
     }
   }
 
-  if (title === null) error('SPEC_MISSING_TITLE', 1, 'Falta el título (# Título)');
+  if (title === null) error('SPEC_MISSING_TITLE', 1, 'Missing title (# Title)');
 
   if (criteria.length === 0 && badHeadings.length === 0) {
-    error('SPEC_NO_AC', 1, 'No hay criterios de aceptación (## Criterios de aceptación / ### AC-1: ...)');
+    error('SPEC_NO_AC', 1, 'No acceptance criteria (## Acceptance criteria / ### AC-1: ...)');
   }
 
   const seen = new Set();
@@ -112,20 +121,23 @@ function lintSpec(text) {
       error(
         'SPEC_AC_BAD_ID',
         line,
-        `El criterio "${bad.title}" no tiene formato "### AC-<n>: <título>"`,
+        `Criterion "${bad.title}" does not match "### AC-<n>: <title>"`,
       );
       continue;
     }
     if (seen.has(ac.id)) {
-      error('SPEC_DUPLICATE_AC', line, `${ac.id} está duplicado`);
+      error('SPEC_DUPLICATE_AC', line, `${ac.id} is duplicated`);
       continue;
     }
     seen.add(ac.id);
     for (const step of ['given', 'when', 'then']) {
       if (!ac[step]) {
         const name = step[0].toUpperCase() + step.slice(1);
-        error('SPEC_AC_INCOMPLETE', line, `${ac.id} no tiene ${name}`);
+        error('SPEC_AC_INCOMPLETE', line, `${ac.id} has no ${name}`);
       }
+    }
+    for (const andLine of ac.orphanAnds) {
+      error('SPEC_AC_ORPHAN_AND', andLine, `${ac.id}: "And" has no previous Given/When/Then to continue`);
     }
   }
 
