@@ -6,6 +6,8 @@ import { listTasks, nextPhase, isBackward, transition, loadState, saveState } fr
 import type { TaskState } from './state';
 import { runGate } from './gates';
 import { parseLedger, checkLedger } from './ledger';
+import { checklistFor } from './checklist';
+import { ledgerHash } from './audit';
 
 const SPECS_DIR = 'specs';
 
@@ -15,6 +17,8 @@ Commands:
   init                    Install SpecPilot in the current project
   spec lint <file>        Check a spec's format
   ledger check <task>     Check that every fact in the grill ledger cites a real source
+  grill checklist <task>  Show which checklist items the grill ledger covers
+  grill hash <task>       Print the hash the grill auditor records in audit.md
   status                  Show each task's phase
   gate <task>             Check the current phase and, if it passes, move to the next one
   reopen <task> <phase>   Go back to an allowed earlier phase
@@ -84,6 +88,46 @@ function ledgerCheck(taskId: string | undefined): number {
   }
   console.error(`${errors.length} ${errors.length === 1 ? 'error' : 'errors'}`);
   return 1;
+}
+
+function grillChecklist(taskId: string | undefined): number {
+  if (!taskId) {
+    console.error('Usage: specpilot grill checklist <task>');
+    return 1;
+  }
+  const task = openTask(taskId);
+  if (!task) return 1;
+
+  const { type } = parseSpec(fs.readFileSync(path.join(task.taskDir, 'spec.md'), 'utf8'));
+  const checklist = checklistFor(type as string);
+  const ledgerFile = path.join(task.taskDir, 'grill.md');
+  const facts = fs.existsSync(ledgerFile) ? parseLedger(fs.readFileSync(ledgerFile, 'utf8')).facts : [];
+  const covered = new Set(facts.flatMap((fact) => fact.topics));
+
+  const done = checklist.filter((item) => covered.has(item.id)).length;
+  console.log(`${taskId} (${type}): ${done}/${checklist.length} covered`);
+  for (const item of checklist) {
+    console.log(`[${covered.has(item.id) ? 'x' : ' '}] ${item.id}: ${item.description}`);
+  }
+  return 0;
+}
+
+function grillHash(taskId: string | undefined): number {
+  if (!taskId) {
+    console.error('Usage: specpilot grill hash <task>');
+    return 1;
+  }
+  const task = openTask(taskId);
+  if (!task) return 1;
+
+  const ledgerFile = path.join(task.taskDir, 'grill.md');
+  if (!fs.existsSync(ledgerFile)) {
+    console.error(`Missing ${ledgerFile}`);
+    return 1;
+  }
+  const specText = fs.readFileSync(path.join(task.taskDir, 'spec.md'), 'utf8');
+  console.log(ledgerHash(specText, fs.readFileSync(ledgerFile, 'utf8')));
+  return 0;
 }
 
 function status(): number {
@@ -165,6 +209,8 @@ function main([command, ...args]: string[]): number {
   }
   if (command === 'spec' && args[0] === 'lint') return specLint(args[1]);
   if (command === 'ledger' && args[0] === 'check') return ledgerCheck(args[1]);
+  if (command === 'grill' && args[0] === 'checklist') return grillChecklist(args[1]);
+  if (command === 'grill' && args[0] === 'hash') return grillHash(args[1]);
   if (command === 'status') return status();
   if (command === 'gate') return gate(args[0]);
   if (command === 'reopen') return reopen(args[0], args[1]);

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { parseSpec } from './spec';
+import { CHECKLISTS } from './checklist';
 
 export const QUESTION_STATUSES = ['open', 'answered', 'assumption'] as const;
 
@@ -18,6 +19,7 @@ export type Citation =
 export interface Fact {
   line: number;
   text: string;
+  topics: string[];
   citations: Citation[];
 }
 
@@ -47,6 +49,7 @@ export type LedgerCode =
   | 'LEDGER_BAD_STATUS'
   | 'LEDGER_NO_ANSWER'
   | 'LEDGER_UNCITED'
+  | 'LEDGER_UNKNOWN_TOPIC'
   | 'CITE_MALFORMED'
   | 'CITE_PATH_OUTSIDE_PROJECT'
   | 'CITE_SNIPPET_TOO_SHORT'
@@ -68,6 +71,7 @@ const CITATION_START = /\[(repo|spec|human):/g;
 const REPO_CITATION = /^\[repo:([^\s:\]]+):(\d+)(?:-(\d+))?\s+"((?:[^"\\]|\\.)*)"\]/;
 const SPEC_CITATION = /^\[spec:(AC-\d+)\]/;
 const HUMAN_CITATION = /^\[human:(Q\d+)\]/;
+const FACT_TOPICS = /^\(([a-z-]+(?:\s*,\s*[a-z-]+)*)\)\s+/;
 const QUESTION_HEADING = /^###\s+(Q\d+):\s*(.+?)\s*$/;
 const QUESTION_FIELD = /^-\s+(Status|Answer|Approved):\s*(.*?)\s*$/i;
 const CITATION_FORMAT =
@@ -149,7 +153,14 @@ export function parseLedger(text: string): Ledger {
       else if (name === 'answer') current.answer = value || null;
       else current.approved = value.toLowerCase() === 'yes';
     } else if (section === 'facts' && /^-\s+/.test(line)) {
-      facts.push({ line: lineNumber, ...parseCitations(line.replace(/^-\s+/, '')) });
+      // "- (errors, validation) Fact text [citation]": the checklist items this fact covers.
+      const body = line.replace(/^-\s+/, '');
+      const topics = body.match(FACT_TOPICS);
+      facts.push({
+        line: lineNumber,
+        topics: topics ? topics[1].split(',').map((topic) => topic.trim()) : [],
+        ...parseCitations(topics ? body.slice(topics[0].length) : body),
+      });
     }
   });
 
@@ -212,7 +223,10 @@ function checkRepoCitation(
 // code in the project, an acceptance criterion in the spec, or an answer from the human.
 export function checkLedger(ledgerText: string, specText: string, projectRoot: string): LedgerError[] {
   const { questions, facts, badQuestions } = parseLedger(ledgerText);
-  const acIds = new Set(parseSpec(specText).acceptanceCriteria.map((ac) => ac.id));
+  const spec = parseSpec(specText);
+  const acIds = new Set(spec.acceptanceCriteria.map((ac) => ac.id));
+  const checklist = spec.type ? CHECKLISTS[spec.type as keyof typeof CHECKLISTS] : undefined;
+  const topicIds = checklist ? checklist.map((item) => item.id) : null;
   const errors: LedgerError[] = [];
   const error = (code: LedgerCode, line: number, message: string) =>
     errors.push({ code, line, message });
@@ -249,6 +263,15 @@ export function checkLedger(ledgerText: string, specText: string, projectRoot: s
   }
 
   for (const fact of facts) {
+    for (const topic of fact.topics) {
+      if (topicIds && !topicIds.includes(topic)) {
+        error(
+          'LEDGER_UNKNOWN_TOPIC',
+          fact.line,
+          `Unknown topic "${topic}" for ${spec.type}. Use: ${topicIds.join(', ')}`,
+        );
+      }
+    }
     if (fact.citations.length === 0) {
       error('LEDGER_UNCITED', fact.line, `Fact has no citation: "${fact.text}"`);
       continue;

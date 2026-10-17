@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -16,7 +17,7 @@ describe('specpilot CLI', () => {
     const result = run('--help');
 
     expect(result.status).toBe(0);
-    for (const command of ['init', 'spec lint', 'ledger check', 'gate', 'reopen', 'tdd', 'mutate', 'verify', 'report', 'status']) {
+    for (const command of ['init', 'spec lint', 'ledger check', 'grill checklist', 'grill hash', 'gate', 'reopen', 'tdd', 'mutate', 'verify', 'report', 'status']) {
       expect(result.stdout).toContain(command);
     }
   });
@@ -122,7 +123,7 @@ describe('specpilot status / gate / reopen', () => {
     const result = runIn(project, 'gate', 'TASK-101');
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('TASK-101 is still in grill');
-    expect(result.stderr).toContain('The grill gate is not implemented yet');
+    expect(result.stderr).toContain(`Missing ${path.join('specs', 'TASK-101', 'grill.md')}`);
     expect(phaseOf()).toBe('grill');
   });
 
@@ -222,5 +223,81 @@ describe('specpilot ledger check', () => {
     const result = runIn(project, 'ledger', 'check');
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Usage: specpilot ledger check <task>');
+  });
+});
+
+describe('specpilot grill', () => {
+  const FIXTURE = path.join(__dirname, 'fixtures', 'project');
+  const COMPLETE = fs.readFileSync(path.join(__dirname, 'fixtures', 'ledgers', 'complete.md'), 'utf8');
+  let project: string;
+  const file = (name: string) => path.join(project, 'specs', 'TASK-102', name);
+  const hash = () =>
+    crypto
+      .createHash('sha256')
+      .update(`${fs.readFileSync(file('spec.md'), 'utf8')}\0${fs.readFileSync(file('grill.md'), 'utf8')}`)
+      .digest('hex');
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-grill-cli-'));
+    fs.cpSync(FIXTURE, project, { recursive: true });
+    fs.writeFileSync(file('grill.md'), COMPLETE.replace('(auth) ', ''));
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  test('grill checklist marks covered and missing items for the task type', () => {
+    const result = runIn(project, 'grill', 'checklist', 'TASK-102');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(
+      [
+        'TASK-102 (endpoint-fields): 7/8 covered',
+        '[x] contract: route, method, request body and response body',
+        '[x] validation: which inputs are accepted or rejected, and the exact rules',
+        '[x] errors: error cases, status codes and error bodies',
+        '[x] data: models, persistence and migrations affected',
+        '[ ] auth: who may call it; permissions and roles',
+        '[x] compatibility: existing clients and callers keep working',
+        '[x] edge-cases: empty, null, duplicate, missing and boundary values',
+        '[x] out-of-scope: what this task must not touch',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  test('grill checklist works before grill.md exists', () => {
+    fs.rmSync(file('grill.md'));
+    const result = runIn(project, 'grill', 'checklist', 'TASK-102');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('TASK-102 (endpoint-fields): 0/8 covered');
+  });
+
+  test('grill hash prints the hash the auditor must record', () => {
+    const result = runIn(project, 'grill', 'hash', 'TASK-102');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(`${hash()}\n`);
+  });
+
+  test('gate moves a task from grill to plan when the grill is complete and audited', () => {
+    fs.writeFileSync(file('grill.md'), COMPLETE);
+    fs.writeFileSync(file('state.json'), JSON.stringify({ taskId: 'TASK-102', phase: 'grill', history: [] }));
+    fs.writeFileSync(file('audit.md'), `Ledger hash: ${hash()}\n\n## Blockers\n\n- none\n`);
+
+    const result = runIn(project, 'gate', 'TASK-102');
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('TASK-102: grill → plan');
+  });
+
+  test.each([
+    [['grill', 'checklist'], 'Usage: specpilot grill checklist <task>'],
+    [['grill', 'hash'], 'Usage: specpilot grill hash <task>'],
+  ])('%j without a task prints usage', (args, usage) => {
+    const result = runIn(project, ...args);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(usage);
+  });
+
+  test('grill on a missing task exits 1', () => {
+    const result = runIn(project, 'grill', 'hash', 'TASK-404');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('No task TASK-404');
   });
 });

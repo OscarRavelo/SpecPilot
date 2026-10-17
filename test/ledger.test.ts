@@ -63,6 +63,17 @@ describe('parseLedger', () => {
     ]);
   });
 
+  test('reads the checklist topics a fact covers and strips them from its text', () => {
+    const text = LEDGER.replace(
+      '- Invalid phone numbers respond',
+      '- (validation, errors) Invalid phone numbers respond',
+    );
+    const facts = parseLedger(text).facts;
+    expect(facts[3].topics).toEqual(['validation', 'errors']);
+    expect(facts[3].text).toBe('Invalid phone numbers respond 400 with INVALID_PHONE');
+    expect(facts[0].topics).toEqual([]);
+  });
+
   test('ignores bullets outside the Facts section', () => {
     const text = LEDGER.replace('## Questions', '- a note under the title\n\n## Questions\n\n- a loose note').replace(
       '## Facts',
@@ -223,6 +234,18 @@ describe('checkLedger: ledger format', () => {
   test('every error of a fact is reported, in order', () => {
     const text = LEDGER.replace('[spec:AC-1]', '[spec:AC-8] [human:Q8]');
     expect(codes(check(text))).toEqual(['CITE_UNKNOWN_AC', 'CITE_UNKNOWN_QUESTION']);
+  });
+
+  test('a topic that is not in the checklist of the task type fails', () => {
+    const text = LEDGER.replace('- A successful update', '- (contract, colour) A successful update');
+    expect(check(text)).toEqual([
+      {
+        code: 'LEDGER_UNKNOWN_TOPIC',
+        line: 18,
+        message:
+          'Unknown topic "colour" for endpoint-fields. Use: contract, validation, errors, data, auth, compatibility, edge-cases, out-of-scope',
+      },
+    ]);
   });
 
   test('a duplicated question fails', () => {
