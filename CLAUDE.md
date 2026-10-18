@@ -17,7 +17,8 @@ It is a TypeScript CLI: sources in `src/`, compiled to `dist/`, tests in `test/*
 - No task is done until the mutation phase (Stryker) has run.
 - SpecPilot itself is built with two subagents in `.claude/agents/`: `tests-agent` may only edit `test/`, `code-agent` may only edit `src/`.
 - The main session only coordinates: it calls the agents, runs `npm test` and reports to the human. It never edits `test/` or `src/` directly.
-- A surviving mutant in the mutation phase is a test gap, and nobody adds tests in mutation. The agent stops, reports the gap and runs `specpilot reopen <task> red`. Then `tests-agent` writes the missing test (it must fail first: `specpilot tdd red <task>`), `code-agent` goes back to green (`specpilot tdd green <task>`), and mutation runs again.
+- `.claude/settings.json` enforces these roles with `specpilot hook pre-tool-use --roles`, run from `dist/` (`npm run build` first). If the hook itself fails, every edit is blocked: stop and ask the human how to fix it, one question at a time, before doing anything else.
+- A surviving mutant in the mutation phase is a test gap, and nobody adds tests in mutation. The agent stops, reports the gap and runs `specpilot reopen <task> red`. Then `code-agent` puts the surviving mutant back, `tests-agent` writes the missing test and sees it fail against the mutant (red: `specpilot tdd red <task>`), `code-agent` removes the mutant (green: `specpilot tdd green <task>`), and mutation runs again.
 
 ## Phases
 

@@ -389,6 +389,53 @@ describe('specpilot hook pre-tool-use', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Usage: specpilot hook pre-tool-use');
   });
+
+  describe('--roles', () => {
+    const hookWith = (args: string[], input: string) => {
+      const { SPECPILOT_TASK, CLAUDE_PROJECT_DIR, ...rest } = process.env;
+      return spawnSync(process.execPath, [BIN, 'hook', 'pre-tool-use', ...args], {
+        encoding: 'utf8',
+        cwd: project,
+        input,
+        env: rest,
+      });
+    };
+    const writeAs = (file: string, agentType?: string) =>
+      JSON.stringify({
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Write',
+        tool_input: { file_path: path.join(project, file) },
+        ...(agentType === undefined ? {} : { agent_type: agentType }),
+      });
+
+    test('the main session cannot write source code with --roles', () => {
+      const result = hookWith(['--roles'], writeAs('src/users.ts'));
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('only code-agent may edit source code (src/users.ts)');
+    });
+
+    test('code-agent can write source code with --roles', () => {
+      const result = hookWith(['--roles'], writeAs('src/users.ts', 'code-agent'));
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+    });
+
+    test('without --roles the main session can write source code', () => {
+      const result = hookWith([], writeAs('src/users.ts'));
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+    });
+
+    test('an unknown flag exits 1 with usage', () => {
+      const result = hookWith(['--bogus'], writeAs('src/users.ts'));
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Usage: specpilot hook pre-tool-use');
+    });
+
+    test('--help lists the flag', () => {
+      expect(run('--help').stdout).toContain('hook pre-tool-use [--roles]');
+    });
+  });
 });
 
 describe('specpilot hook stop', () => {

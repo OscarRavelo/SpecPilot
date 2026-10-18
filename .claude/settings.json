@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/dist/cli.js\" hook pre-tool-use --roles; s=$?; if [ \"$s\" -eq 0 ] || [ \"$s\" -eq 2 ]; then exit \"$s\"; fi; printf 'Blocked by SpecPilot: the SpecPilot hook failed (exit %s), so no edit is safe. The error is above.\\nSTOP: do not try to fix or work around the hook yourself. Ask the human how to fix it, one question at a time (like the grill phase), and wait for the answers before doing anything else.\\n' \"$s\" >&2; exit 2"
+          }
+        ]
+      }
+    ]
+  }
+}

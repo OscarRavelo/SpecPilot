@@ -332,6 +332,173 @@ describe('checkToolUse', () => {
   });
 });
 
+describe('checkToolUse with agent roles', () => {
+  let root: string;
+
+  const writeTask = (taskId: string, phase: string) => {
+    fs.mkdirSync(path.join(root, 'specs', taskId), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'specs', taskId, 'state.json'),
+      JSON.stringify({ taskId, phase, history: [] }),
+    );
+  };
+  const edit = (file: string, tool: string, agentType?: string): ToolUse => ({
+    tool_name: tool,
+    tool_input: tool === 'NotebookEdit' ? { notebook_path: path.join(root, file) } : { file_path: path.join(root, file) },
+    ...(agentType === undefined ? {} : { agent_type: agentType }),
+  });
+  const bash = (command: string, agentType?: string): ToolUse => ({
+    tool_name: 'Bash',
+    tool_input: { command },
+    ...(agentType === undefined ? {} : { agent_type: agentType }),
+  });
+  const withRoles = (input: ToolUse, taskId?: string) => checkToolUse(input, root, taskId, true);
+
+  const ALLOWED = { allow: true };
+  const ONLY_TESTS_AGENT = (file: string) => ({
+    allow: false,
+    reason: `Blocked by SpecPilot: only tests-agent may edit tests (${file}).`,
+  });
+  const ONLY_CODE_AGENT = (file: string) => ({
+    allow: false,
+    reason: `Blocked by SpecPilot: only code-agent may edit source code (${file}).`,
+  });
+  const TESTS_AGENT_OTHER = (file: string) => ({
+    allow: false,
+    reason: `Blocked by SpecPilot: tests-agent may only edit tests, and ${file} is not a test.`,
+  });
+  const CODE_AGENT_OTHER = (file: string) => ({
+    allow: false,
+    reason: `Blocked by SpecPilot: code-agent may only edit source code, and ${file} is not source code.`,
+  });
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-roles-'));
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  // What each agent may do with a test, a source file and any other file, without tasks in specs/.
+  const MATRIX: [string, string | undefined, Record<string, object>][] = [
+    [
+      'the main session',
+      undefined,
+      {
+        'test/a.test.ts': ONLY_TESTS_AGENT('test/a.test.ts'),
+        'src/a.ts': ONLY_CODE_AGENT('src/a.ts'),
+        'README.md': ALLOWED,
+      },
+    ],
+    [
+      'tests-agent',
+      'tests-agent',
+      {
+        'test/a.test.ts': ALLOWED,
+        'src/a.ts': ONLY_CODE_AGENT('src/a.ts'),
+        'README.md': TESTS_AGENT_OTHER('README.md'),
+      },
+    ],
+    [
+      'code-agent',
+      'code-agent',
+      {
+        'test/a.test.ts': ONLY_TESTS_AGENT('test/a.test.ts'),
+        'src/a.ts': ALLOWED,
+        'README.md': CODE_AGENT_OTHER('README.md'),
+      },
+    ],
+    [
+      'grill-auditor',
+      'grill-auditor',
+      {
+        'test/a.test.ts': ONLY_TESTS_AGENT('test/a.test.ts'),
+        'src/a.ts': ONLY_CODE_AGENT('src/a.ts'),
+        'README.md': ALLOWED,
+      },
+    ],
+  ];
+
+  describe.each(MATRIX)('%s', (_, agentType, expected) => {
+    test.each(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])('%s follows the role table', (tool) => {
+      const decisions = Object.fromEntries(
+        Object.keys(expected).map((file) => [file, withRoles(edit(file, tool, agentType))]),
+      );
+      expect(decisions).toEqual(expected);
+    });
+  });
+
+  describe('Bash', () => {
+    test('the main session cannot write source code from the shell', () => {
+      expect(withRoles(bash('echo x > src/a.ts'))).toEqual(ONLY_CODE_AGENT('src/a.ts'));
+    });
+
+    test('code-agent may edit source code from the shell but not delete a test', () => {
+      expect(withRoles(bash("sed -i '' 's/a/b/' src/a.ts", 'code-agent'))).toEqual(ALLOWED);
+      expect(withRoles(bash('rm test/a.test.ts', 'code-agent'))).toEqual(ONLY_TESTS_AGENT('test/a.test.ts'));
+    });
+
+    test('tests-agent may write a test from the shell but not source code', () => {
+      expect(withRoles(bash('echo x > test/a.test.ts', 'tests-agent'))).toEqual(ALLOWED);
+      expect(withRoles(bash('echo x > src/a.ts', 'tests-agent'))).toEqual(ONLY_CODE_AGENT('src/a.ts'));
+    });
+  });
+
+  describe('with phases', () => {
+    test('in red the phase still blocks code-agent, and only tests-agent may edit tests', () => {
+      writeTask('TASK-101', 'red');
+      const code = withRoles(edit('src/a.ts', 'Edit', 'code-agent'));
+      expect(code.allow).toBe(false);
+      expect(code.reason).toContain('TASK-101 is in red');
+      expect(withRoles(edit('test/a.test.ts', 'Edit', 'tests-agent'))).toEqual(ALLOWED);
+      expect(withRoles(edit('test/a.test.ts', 'Edit'))).toEqual(ONLY_TESTS_AGENT('test/a.test.ts'));
+    });
+
+    test('when both the role and the phase deny, the role reason is returned', () => {
+      writeTask('TASK-101', 'red');
+      expect(withRoles(edit('src/a.ts', 'Edit'))).toEqual(ONLY_CODE_AGENT('src/a.ts'));
+    });
+
+    test('in green the phase blocks tests-agent, and only code-agent may edit source code', () => {
+      writeTask('TASK-101', 'green');
+      const tests = withRoles(edit('test/a.test.ts', 'Edit', 'tests-agent'));
+      expect(tests.allow).toBe(false);
+      expect(tests.reason).toContain('TASK-101 is in green');
+      expect(withRoles(edit('src/a.ts', 'Edit', 'code-agent'))).toEqual(ALLOWED);
+      expect(withRoles(edit('src/a.ts', 'Edit'))).toEqual(ONLY_CODE_AGENT('src/a.ts'));
+    });
+  });
+
+  test('state.json is still written only by the CLI, even for code-agent', () => {
+    const decision = withRoles(edit('specs/TASK-101/state.json', 'Write', 'code-agent'));
+    expect(decision.allow).toBe(false);
+    expect(decision.reason).toContain('specpilot gate');
+  });
+
+  test('grill-auditor may still write audit.md', () => {
+    writeTask('TASK-101', 'grill');
+    expect(withRoles(edit('specs/TASK-101/audit.md', 'Write', 'grill-auditor'))).toEqual(ALLOWED);
+  });
+
+  test('files outside the project are allowed', () => {
+    const outside = path.join(os.tmpdir(), 'elsewhere', 'users.ts');
+    expect(withRoles({ tool_name: 'Write', tool_input: { file_path: outside } })).toEqual(ALLOWED);
+  });
+
+  test('without roles the same edits are allowed', () => {
+    const calls: ToolUse[] = [
+      edit('src/a.ts', 'Write'),
+      edit('test/a.test.ts', 'Edit', 'code-agent'),
+      edit('README.md', 'Edit', 'tests-agent'),
+      edit('README.md', 'Edit', 'code-agent'),
+      bash('echo x > src/a.ts'),
+      bash('rm test/a.test.ts', 'code-agent'),
+    ];
+    for (const call of calls) {
+      expect(checkToolUse(call, root)).toEqual(ALLOWED);
+      expect(checkToolUse(call, root, undefined, false)).toEqual(ALLOWED);
+    }
+  });
+});
+
 describe('stopWarning', () => {
   let root: string;
   const writeTask = (taskId: string, phase: string) => {

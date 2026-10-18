@@ -241,7 +241,16 @@ export function watchedTasks(root: string, taskId?: string): { taskId: string; p
   return [loadState(path.join(specsDir, taskId), taskId)];
 }
 
-function checkFile(target: string, root: string, agentType: string | undefined, taskId?: string): HookDecision {
+// Tests belong to tests-agent and source code to code-agent; each of them may edit nothing else.
+function roleRule(agentType: string | undefined, kind: FileKind, file: string): string | null {
+  if (kind === 'test') return agentType === 'tests-agent' ? null : `only tests-agent may edit tests (${file}).`;
+  if (kind === 'source') return agentType === 'code-agent' ? null : `only code-agent may edit source code (${file}).`;
+  if (agentType === 'tests-agent') return `tests-agent may only edit tests, and ${file} is not a test.`;
+  if (agentType === 'code-agent') return `code-agent may only edit source code, and ${file} is not source code.`;
+  return null;
+}
+
+function checkFile(target: string, root: string, agentType: string | undefined, taskId?: string, roles = false): HookDecision {
   const realRoot = realPath(path.resolve(root));
   const relative = path.relative(realRoot, realPath(path.resolve(root, target)));
   if (relative.startsWith('..') || path.isAbsolute(relative)) return allow();
@@ -253,6 +262,10 @@ function checkFile(target: string, root: string, agentType: string | undefined, 
   }
   if (kind === 'audit') {
     return agentType === 'grill-auditor' ? allow() : deny(`${file} is written only by the grill-auditor subagent.`);
+  }
+  if (roles) {
+    const reason = roleRule(agentType, kind, file);
+    if (reason !== null) return deny(reason);
   }
   if (kind === 'other') return allow();
 
@@ -292,7 +305,8 @@ export function stopWarning(root: string, taskId?: string): string | null {
     .join(' ');
 }
 
-export function checkToolUse(input: ToolUse, root: string, taskId?: string): HookDecision {
+// With roles, a file must be allowed both by the agent's role and by the phase; the role is checked first.
+export function checkToolUse(input: ToolUse, root: string, taskId?: string, roles = false): HookDecision {
   let targets: string[];
   if (input.tool_name === 'Bash') {
     const command = input.tool_input.command;
@@ -305,7 +319,7 @@ export function checkToolUse(input: ToolUse, root: string, taskId?: string): Hoo
   }
 
   for (const target of targets) {
-    const decision = checkFile(target, root, input.agent_type, taskId);
+    const decision = checkFile(target, root, input.agent_type, taskId, roles);
     if (!decision.allow) return decision;
   }
   return allow();

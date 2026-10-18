@@ -22,7 +22,8 @@ Commands:
   ledger check <task>     Check that every fact in the grill ledger cites a real source
   grill checklist <task>  Show which checklist items the grill ledger covers
   grill hash <task>       Print the hash the grill auditor records in audit.md
-  hook pre-tool-use       Claude Code hook: block edits the current phase does not allow
+  hook pre-tool-use [--roles]
+                          Claude Code hook: block edits the phase (or, with --roles, the role) does not allow
   hook stop               Claude Code hook: warn when a task cannot be done yet
   status                  Show each task's phase
   gate <task>             Check the current phase and, if it passes, move to the next one
@@ -204,12 +205,13 @@ function reopen(taskId: string | undefined, phase: string | undefined): number {
 }
 
 // Exit 2 tells Claude Code to block the tool call and show stderr to the agent.
-function hook(event: string | undefined): number {
+function hook(event: string | undefined, flags: string[]): number {
   if (event === 'stop') return hookStop();
-  if (event !== 'pre-tool-use') {
-    console.error('Usage: specpilot hook pre-tool-use|stop');
+  if (event !== 'pre-tool-use' || flags.some((flag) => flag !== '--roles')) {
+    console.error('Usage: specpilot hook pre-tool-use [--roles] | specpilot hook stop');
     return 1;
   }
+  const roles = flags.includes('--roles');
 
   let input: ToolUse;
   try {
@@ -224,7 +226,7 @@ function hook(event: string | undefined): number {
   }
 
   const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-  const decision = checkToolUse(input, root, process.env.SPECPILOT_TASK || undefined);
+  const decision = checkToolUse(input, root, process.env.SPECPILOT_TASK || undefined, roles);
   if (decision.allow) return 0;
   console.error(decision.reason);
   return 2;
@@ -307,7 +309,7 @@ function main([command, ...args]: string[]): number {
   if (command === 'ledger' && args[0] === 'check') return ledgerCheck(args[1]);
   if (command === 'grill' && args[0] === 'checklist') return grillChecklist(args[1]);
   if (command === 'grill' && args[0] === 'hash') return grillHash(args[1]);
-  if (command === 'hook') return hook(args[0]);
+  if (command === 'hook') return hook(args[0], args.slice(1));
   if (command === 'tdd') return tdd(args[0], args[1]);
   if (command === 'status') return status();
   if (command === 'gate') return gate(args[0]);
