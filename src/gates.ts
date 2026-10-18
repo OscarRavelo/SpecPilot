@@ -4,6 +4,7 @@ import { parseSpec, lintSpec } from './spec';
 import { checklistFor } from './checklist';
 import { checkLedger, parseLedger } from './ledger';
 import { ledgerHash, parseAudit } from './audit';
+import { hashChanges, readEvidence, testFileHashes } from './tdd';
 import type { Phase } from './state';
 
 export interface GateResult {
@@ -91,9 +92,44 @@ function grillGate(taskDir: string, projectRoot: string): GateResult {
   return reasons.length === 0 ? pass() : fail(...reasons);
 }
 
+// Red closes only if tdd red saw the tests fail on assertions and the tests have not changed since.
+function redGate(taskDir: string, projectRoot: string): GateResult {
+  const taskId = path.basename(taskDir);
+  const red = readEvidence(taskDir, 'red');
+  if (!red) return fail(`Missing red.json: run specpilot tdd red ${taskId}`);
+  const changes = hashChanges(red.testFiles, testFileHashes(projectRoot));
+  if (changes.length > 0) {
+    return fail(`Tests changed after tdd red (${changes.join(', ')}): run specpilot tdd red ${taskId} again`);
+  }
+  return pass();
+}
+
+// Green closes only if tdd green saw every test pass, with exactly the tests that were red.
+function greenGate(taskDir: string, projectRoot: string): GateResult {
+  const taskId = path.basename(taskDir);
+  const red = readEvidence(taskDir, 'red');
+  if (!red) return fail(`Missing red.json: run specpilot tdd red ${taskId}`);
+  const green = readEvidence(taskDir, 'green');
+  if (!green) return fail(`Missing green.json: run specpilot tdd green ${taskId}`);
+
+  const sinceGreen = hashChanges(green.testFiles, testFileHashes(projectRoot));
+  if (sinceGreen.length > 0) {
+    return fail(`Tests changed after tdd green (${sinceGreen.join(', ')}): run specpilot tdd green ${taskId} again`);
+  }
+  const redToGreen = hashChanges(red.testFiles, green.testFiles);
+  if (redToGreen.length > 0) {
+    return fail(
+      `Tests changed between tdd red and tdd green (${redToGreen.join(', ')}): go back with specpilot reopen ${taskId} red`,
+    );
+  }
+  return pass();
+}
+
 const GATES: Partial<Record<Phase, Gate>> = {
   research: researchGate,
   grill: grillGate,
+  red: redGate,
+  green: greenGate,
 };
 
 // Checks whether the current phase can be closed. A phase without an implemented gate never passes.
@@ -101,5 +137,9 @@ export function runGate(taskDir: string, phase: Phase, projectRoot: string = pro
   if (phase === 'done') return fail('The task is already done');
   const gate = GATES[phase];
   if (!gate) return fail(`The ${phase} gate is not implemented yet`);
-  return gate(taskDir, projectRoot);
+  try {
+    return gate(taskDir, projectRoot);
+  } catch (err) {
+    return fail((err as Error).message);
+  }
 }

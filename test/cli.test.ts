@@ -449,3 +449,137 @@ describe('specpilot hook stop', () => {
     }
   });
 });
+
+describe('specpilot tdd', () => {
+  const NODE_MODULES = path.join(__dirname, '..', 'node_modules');
+  const ADDS_TEST = "const { sum } = require('../src/sum');\ntest('adds', () => { expect(sum(1, 2)).toBe(3); });\n";
+  let project: string;
+  const file = (name: string) => path.join(project, name);
+  const writeState = (phase: string) =>
+    fs.writeFileSync(file('specs/TASK-101/state.json'), JSON.stringify({ taskId: 'TASK-101', phase, history: [] }));
+  const evidence = (stage: string) => JSON.parse(fs.readFileSync(file(`specs/TASK-101/${stage}.json`), 'utf8'));
+
+  // A real project: Jest runs through npm test, as it would in a target project.
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-tdd-cli-'));
+    fs.symlinkSync(NODE_MODULES, file('node_modules'));
+    fs.writeFileSync(
+      file('package.json'),
+      JSON.stringify({ name: 'demo', private: true, scripts: { test: 'jest' }, jest: { testEnvironment: 'node' } }),
+    );
+    fs.mkdirSync(file('src'));
+    fs.mkdirSync(file('test'));
+    fs.mkdirSync(file('specs/TASK-101'), { recursive: true });
+    fs.copyFileSync(path.join(SPECS, 'valid.md'), file('specs/TASK-101/spec.md'));
+    fs.writeFileSync(file('src/sum.js'), 'exports.sum = () => 0;\n');
+    fs.writeFileSync(file('test/sum.test.js'), ADDS_TEST);
+    writeState('red');
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  test('tdd red records the tests that fail on assertions', () => {
+    const result = runIn(project, 'tdd', 'red', 'TASK-101');
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('RED: TASK-101 (1 failing test, all on assertions)');
+    expect(result.stdout).toContain('Next: specpilot gate TASK-101');
+    expect(evidence('red')).toEqual({
+      taskId: 'TASK-101',
+      at: expect.any(String),
+      tests: ['adds'],
+      testFiles: { 'test/sum.test.js': expect.stringMatching(/^[0-9a-f]{64}$/) },
+    });
+  });
+
+  test('tdd red fails when no test fails', () => {
+    fs.writeFileSync(file('src/sum.js'), 'exports.sum = (a, b) => a + b;\n');
+    const result = runIn(project, 'tdd', 'red', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('TASK-101 is not red:');
+    expect(result.stderr).toContain('No test fails');
+    expect(fs.existsSync(file('specs/TASK-101/red.json'))).toBe(false);
+  });
+
+  test('tdd red fails when a suite does not even run', () => {
+    fs.writeFileSync(file('test/broken.test.js'), "require('../src/missing');\ntest('x', () => {});\n");
+    const result = runIn(project, 'tdd', 'red', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("test/broken.test.js failed to run: Cannot find module '../src/missing'");
+  });
+
+  test('tdd red fails when a test throws instead of failing an assertion', () => {
+    fs.writeFileSync(file('test/sum.test.js'), "const { sum } = require('../src/sum');\ntest('throws', () => { sum.nope(); });\n");
+    const result = runIn(project, 'tdd', 'red', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('"throws" fails with an error, not an assertion: TypeError');
+  });
+
+  test('tdd only runs in its own phase', () => {
+    writeState('plan');
+    const red = runIn(project, 'tdd', 'red', 'TASK-101');
+    expect(red.status).toBe(1);
+    expect(red.stderr).toContain('TASK-101 is in plan: tdd red runs only in the red phase');
+    const green = runIn(project, 'tdd', 'green', 'TASK-101');
+    expect(green.stderr).toContain('TASK-101 is in plan: tdd green runs only in the green phase');
+  });
+
+  test('red → gate → green → gate, with real tests', () => {
+    expect(runIn(project, 'tdd', 'red', 'TASK-101').status).toBe(0);
+    expect(runIn(project, 'gate', 'TASK-101').stdout).toContain('TASK-101: red → green');
+
+    fs.writeFileSync(file('src/sum.js'), 'exports.sum = (a, b) => a + b;\n');
+    const green = runIn(project, 'tdd', 'green', 'TASK-101');
+    expect(green.stderr).toBe('');
+    expect(green.status).toBe(0);
+    expect(green.stdout).toContain('GREEN: TASK-101 (1 test passes, tests unchanged since red)');
+    expect(evidence('green')).toEqual({ ...evidence('red'), at: expect.any(String) });
+
+    expect(runIn(project, 'gate', 'TASK-101').stdout).toContain('TASK-101: green → mutation');
+  });
+
+  test('tdd green fails while a test still fails', () => {
+    expect(runIn(project, 'tdd', 'red', 'TASK-101').status).toBe(0);
+    writeState('green');
+    const result = runIn(project, 'tdd', 'green', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('TASK-101 is not green:');
+    expect(result.stderr).toContain('"adds" still fails');
+    expect(fs.existsSync(file('specs/TASK-101/green.json'))).toBe(false);
+  });
+
+  test('tdd green fails when the tests changed since red', () => {
+    expect(runIn(project, 'tdd', 'red', 'TASK-101').status).toBe(0);
+    writeState('green');
+    fs.writeFileSync(file('src/sum.js'), 'exports.sum = (a, b) => a + b;\n');
+    fs.writeFileSync(file('test/sum.test.js'), ADDS_TEST.replace('toBe(3)', 'toBeGreaterThan(0)'));
+    const result = runIn(project, 'tdd', 'green', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Tests changed since tdd red (changed test/sum.test.js)');
+  });
+
+  test('tdd green needs red.json', () => {
+    writeState('green');
+    const result = runIn(project, 'tdd', 'green', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Missing red.json: run specpilot tdd red TASK-101 first');
+  });
+
+  test('a test script that does not run Jest is reported', () => {
+    fs.writeFileSync(file('package.json'), JSON.stringify({ name: 'demo', private: true, scripts: { test: 'echo no tests' } }));
+    const result = runIn(project, 'tdd', 'red', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('npm test did not write a Jest JSON report');
+  });
+
+  test.each([[['tdd']], [['tdd', 'red']], [['tdd', 'blue', 'TASK-101']]])('%j prints usage', (args) => {
+    const result = runIn(project, ...args);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Usage: specpilot tdd red|green <task>');
+  });
+
+  test('tdd on a missing task exits 1', () => {
+    const result = runIn(project, 'tdd', 'red', 'TASK-404');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('No task TASK-404');
+  });
+});

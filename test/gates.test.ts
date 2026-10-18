@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { runGate } from '../src/gates';
+import { testFileHashes, writeEvidence } from '../src/tdd';
 import type { Phase } from '../src/state';
 
 const VALID_SPEC = fs.readFileSync(
@@ -46,7 +47,7 @@ describe('runGate', () => {
     });
   });
 
-  test.each<Phase>(['plan', 'red', 'green', 'mutation', 'verify'])(
+  test.each<Phase>(['plan', 'mutation', 'verify'])(
     'the not-yet-implemented %s gate never lets the task through',
     (phase) => {
       fs.writeFileSync(path.join(dir, 'spec.md'), VALID_SPEC);
@@ -167,5 +168,99 @@ describe('runGate: grill', () => {
       'Checklist item not covered: auth (who may call it; permissions and roles)',
       'audit.md is stale: spec.md or grill.md changed after the audit. Run the grill-auditor subagent again',
     ]);
+  });
+});
+
+describe('runGate: red and green', () => {
+  let project: string;
+  const taskDir = () => path.join(project, 'specs', 'TASK-101');
+  const writeTest = (text: string) => fs.writeFileSync(path.join(project, 'test', 'a.test.js'), text);
+  const record = (stage: 'red' | 'green') =>
+    writeEvidence(taskDir(), stage, {
+      taskId: 'TASK-101',
+      at: '2026-10-18T10:00:00.000Z',
+      tests: ['adds'],
+      testFiles: testFileHashes(project),
+    });
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-tdd-gate-'));
+    fs.mkdirSync(taskDir(), { recursive: true });
+    fs.mkdirSync(path.join(project, 'test'));
+    writeTest('test 1');
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  test('red needs the evidence of tdd red', () => {
+    expect(runGate(taskDir(), 'red', project)).toEqual({
+      ok: false,
+      reasons: ['Missing red.json: run specpilot tdd red TASK-101'],
+    });
+  });
+
+  test('red passes when the tests are the ones tdd red saw fail', () => {
+    record('red');
+    expect(runGate(taskDir(), 'red', project)).toEqual({ ok: true, reasons: [] });
+  });
+
+  test('red fails when the tests changed after tdd red', () => {
+    record('red');
+    writeTest('test 2');
+    expect(runGate(taskDir(), 'red', project)).toEqual({
+      ok: false,
+      reasons: ['Tests changed after tdd red (changed test/a.test.js): run specpilot tdd red TASK-101 again'],
+    });
+  });
+
+  test('green needs the evidence of tdd green', () => {
+    record('red');
+    expect(runGate(taskDir(), 'green', project)).toEqual({
+      ok: false,
+      reasons: ['Missing green.json: run specpilot tdd green TASK-101'],
+    });
+  });
+
+  test('green passes when red, green and the current tests all match', () => {
+    record('red');
+    record('green');
+    expect(runGate(taskDir(), 'green', project)).toEqual({ ok: true, reasons: [] });
+  });
+
+  test('green fails when the tests changed after tdd green', () => {
+    record('red');
+    record('green');
+    writeTest('test 2');
+    expect(runGate(taskDir(), 'green', project)).toEqual({
+      ok: false,
+      reasons: ['Tests changed after tdd green (changed test/a.test.js): run specpilot tdd green TASK-101 again'],
+    });
+  });
+
+  test('green fails when the tests differ between tdd red and tdd green', () => {
+    record('red');
+    writeTest('test 2');
+    record('green');
+    expect(runGate(taskDir(), 'green', project)).toEqual({
+      ok: false,
+      reasons: [
+        'Tests changed between tdd red and tdd green (changed test/a.test.js): go back with specpilot reopen TASK-101 red',
+      ],
+    });
+  });
+
+  test('green without red.json fails', () => {
+    record('green');
+    expect(runGate(taskDir(), 'green', project)).toEqual({
+      ok: false,
+      reasons: ['Missing red.json: run specpilot tdd red TASK-101'],
+    });
+  });
+
+  test('corrupt evidence is reported', () => {
+    fs.writeFileSync(path.join(taskDir(), 'red.json'), '{nope');
+    expect(runGate(taskDir(), 'red', project)).toEqual({
+      ok: false,
+      reasons: [`Corrupt red.json in ${taskDir()}`],
+    });
   });
 });

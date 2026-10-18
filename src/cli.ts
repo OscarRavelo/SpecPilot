@@ -9,6 +9,7 @@ import { parseLedger, checkLedger } from './ledger';
 import { checklistFor } from './checklist';
 import { ledgerHash } from './audit';
 import { checkToolUse, stopWarning } from './hooks';
+import { failingTests, greenProblems, hashChanges, passingTests, readEvidence, redProblems, runTests, testFileHashes, writeEvidence } from './tdd';
 import type { ToolUse } from './hooks';
 
 const SPECS_DIR = 'specs';
@@ -26,13 +27,13 @@ Commands:
   status                  Show each task's phase
   gate <task>             Check the current phase and, if it passes, move to the next one
   reopen <task> <phase>   Go back to an allowed earlier phase
-  tdd red|green           Record red / green evidence
+  tdd red|green <task>    Run the tests and record red / green evidence
   mutate                  Inject bugs and check that the tests fail
   verify                  Verify the task against its spec
   report                  Summarize cost and quality metrics
 `;
 
-const NOT_IMPLEMENTED = ['init', 'tdd', 'mutate', 'verify', 'report'];
+const NOT_IMPLEMENTED = ['init', 'mutate', 'verify', 'report'];
 
 function specLint(file: string | undefined): number {
   if (!file) {
@@ -243,6 +244,56 @@ function hookStop(): number {
   return 0;
 }
 
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+// Red: the tests must fail, and only on assertions. Green: they must all pass, unchanged since red.
+function tdd(stage: string | undefined, taskId: string | undefined): number {
+  if ((stage !== 'red' && stage !== 'green') || !taskId) {
+    console.error('Usage: specpilot tdd red|green <task>');
+    return 1;
+  }
+  const task = openTask(taskId);
+  if (!task) return 1;
+
+  const { taskDir, state } = task;
+  if (state.phase !== stage) {
+    console.error(`${taskId} is in ${state.phase}: tdd ${stage} runs only in the ${stage} phase`);
+    return 1;
+  }
+  const root = process.cwd();
+  const red = stage === 'green' ? readEvidence(taskDir, 'red') : null;
+  if (stage === 'green' && !red) {
+    console.error(`Missing red.json: run specpilot tdd red ${taskId} first`);
+    return 1;
+  }
+
+  const report = runTests(root);
+  const testFiles = testFileHashes(root);
+  const problems = stage === 'red' ? redProblems(report, root) : greenProblems(report, root);
+  if (red) {
+    const changes = hashChanges(red.testFiles, testFiles);
+    if (changes.length > 0) {
+      problems.push(`Tests changed since tdd red (${changes.join(', ')}): go back with specpilot reopen ${taskId} red`);
+    }
+  }
+  if (problems.length > 0) {
+    console.error(`${taskId} is not ${stage}:`);
+    for (const problem of problems) console.error(`  - ${problem}`);
+    return 1;
+  }
+
+  const tests = stage === 'red' ? failingTests(report) : passingTests(report);
+  writeEvidence(taskDir, stage, { taskId, at: new Date().toISOString(), tests, testFiles });
+  if (stage === 'red') {
+    console.log(`RED: ${taskId} (${plural(tests.length, 'failing test')}, all on assertions)`);
+    for (const name of tests) console.log(`  ✕ ${name}`);
+  } else {
+    console.log(`GREEN: ${taskId} (${tests.length} ${tests.length === 1 ? 'test passes' : 'tests pass'}, tests unchanged since red)`);
+  }
+  console.log(`Next: specpilot gate ${taskId}`);
+  return 0;
+}
+
 function main([command, ...args]: string[]): number {
   if (command === '--help' || command === '-h') {
     console.log(HELP);
@@ -257,6 +308,7 @@ function main([command, ...args]: string[]): number {
   if (command === 'grill' && args[0] === 'checklist') return grillChecklist(args[1]);
   if (command === 'grill' && args[0] === 'hash') return grillHash(args[1]);
   if (command === 'hook') return hook(args[0]);
+  if (command === 'tdd') return tdd(args[0], args[1]);
   if (command === 'status') return status();
   if (command === 'gate') return gate(args[0]);
   if (command === 'reopen') return reopen(args[0], args[1]);

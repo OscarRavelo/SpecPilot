@@ -9,6 +9,8 @@ describe('classifyPath', () => {
   test.each([
     ['specs/TASK-101/state.json', 'state'],
     ['specs/TASK-101/audit.md', 'audit'],
+    ['specs/TASK-101/red.json', 'state'],
+    ['specs/TASK-101/green.json', 'state'],
     ['src/users.test.ts', 'test'],
     ['src/Button.spec.tsx', 'test'],
     ['src/__tests__/users.ts', 'test'],

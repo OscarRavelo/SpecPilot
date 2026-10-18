@@ -41,7 +41,7 @@ export function classifyPath(relPath: string): FileKind {
   const parts = relPath.split('/');
   const name = parts[parts.length - 1];
   if (parts.length === 3 && parts[0] === 'specs') {
-    if (name === 'state.json') return 'state';
+    if (name === 'state.json' || name === 'red.json' || name === 'green.json') return 'state';
     if (name === 'audit.md') return 'audit';
   }
   if (TEST_FILE.test(name) || parts.slice(0, -1).some((part) => TEST_DIRS.includes(part))) return 'test';
@@ -249,7 +249,7 @@ function checkFile(target: string, root: string, agentType: string | undefined, 
   const kind = classifyPath(file);
 
   if (kind === 'state') {
-    return deny(`${file} is managed by the CLI; move phases with specpilot gate or specpilot reopen.`);
+    return deny(`${file} is written only by the specpilot CLI (specpilot tdd, specpilot gate, specpilot reopen).`);
   }
   if (kind === 'audit') {
     return agentType === 'grill-auditor' ? allow() : deny(`${file} is written only by the grill-auditor subagent.`);
