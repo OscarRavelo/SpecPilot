@@ -345,6 +345,14 @@ describe('specpilot hook pre-tool-use', () => {
     expect(result.stderr).toContain('TASK-101 is in plan');
   });
 
+  test('a Bash command that writes code is blocked too', () => {
+    writeTask('TASK-101', 'plan');
+    const input = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'echo x > src/users.ts' } });
+    const result = hook(input);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('src/users.ts cannot be edited');
+  });
+
   test('SPECPILOT_TASK chooses the task', () => {
     writeTask('TASK-101', 'red');
     writeTask('TASK-102', 'green');

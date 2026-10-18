@@ -86,7 +86,7 @@ The grill phase closes (`specpilot gate`) only when the ledger check is clean, n
 
 Claude Code templates for this phase: the [`sp-grill` skill](templates/.claude/skills/sp-grill/SKILL.md), which runs the one-question-at-a-time loop, and the [`grill-auditor` subagent](templates/.claude/agents/grill-auditor.md), a clean-context reviewer that cannot edit code.
 
-Phase hooks keep the agent inside the workflow. The [`settings.json` template](templates/.claude/settings.json) runs `specpilot hook pre-tool-use` before every `Write`, `Edit`, `MultiEdit` and `NotebookEdit`, and blocks the edit (exit code 2, with the reason shown to the agent) when the task's phase does not allow it:
+Phase hooks keep the agent inside the workflow. The [`settings.json` template](templates/.claude/settings.json) runs `specpilot hook pre-tool-use` before every `Write`, `Edit`, `MultiEdit`, `NotebookEdit` and `Bash` call, and blocks the edit (exit code 2, with the reason shown to the agent) when the task's phase does not allow it:
 
 | Phase | Tests | Source code |
 |---|---|---|
@@ -95,7 +95,7 @@ Phase hooks keep the agent inside the workflow. The [`settings.json` template](t
 | `green`, `mutation` | blocked | allowed |
 | `verify` | blocked | blocked |
 
-Test files are `*.test.*` / `*.spec.*` and anything under `test/`, `tests/` or `__tests__/`; source code is any other `.ts`, `.tsx`, `.js` or `.jsx` file (including `.mjs`/`.cjs`). Other files, such as docs, the spec and the grill ledger, can always be edited. `state.json` can never be edited by the agent (only `gate` and `reopen` move a task), and `audit.md` can only be written by the `grill-auditor` subagent. With no active task, nothing is blocked. With several active tasks, an edit must be allowed by all of them, unless `SPECPILOT_TASK=<task-id>` chooses the one you are working on. A corrupt `state.json` blocks code and test edits instead of letting them through. Known limit: the hook checks file-editing tools, not files written from a Bash command.
+Test files are `*.test.*` / `*.spec.*` and anything under `test/`, `tests/` or `__tests__/`; source code is any other `.ts`, `.tsx`, `.js` or `.jsx` file (including `.mjs`/`.cjs`). Other files, such as docs, the spec and the grill ledger, can always be edited. `state.json` can never be edited by the agent (only `gate` and `reopen` move a task), and `audit.md` can only be written by the `grill-auditor` subagent. With no active task, nothing is blocked. With several active tasks, an edit must be allowed by all of them, unless `SPECPILOT_TASK=<task-id>` chooses the one you are working on. A corrupt `state.json` blocks code and test edits instead of letting them through. For `Bash`, the hook finds the files a command writes: redirections (`>`, `>>`, `2>`, `&>`), `tee`, `sed -i`, `perl -i`, `cp`, `mv`, `rm`, `touch`, `truncate` and `dd of=`, across `&&`, `||`, `;` and pipes, skipping heredoc bodies. Known limit: files written from inside a program (`node -e`, `python -c`, `git apply`, `git checkout -- <file>`) are not detected.
 
 ```bash
 npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format

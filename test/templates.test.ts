@@ -92,10 +92,10 @@ describe('settings.json', () => {
   const settings = JSON.parse(fs.readFileSync(SETTINGS, 'utf8'));
   const groups: { matcher: string; hooks: { type: string; command: string }[] }[] = settings.hooks.PreToolUse;
 
-  test('runs the phase hook before every tool that edits files', () => {
+  test('runs the phase hook before every tool that edits files, including Bash', () => {
     const group = groups.find((g) => g.hooks.some((h) => h.command === 'npx specpilot hook pre-tool-use'));
     expect(group).toBeDefined();
-    expect(group!.matcher.split('|').sort()).toEqual(['Edit', 'MultiEdit', 'NotebookEdit', 'Write']);
+    expect(group!.matcher.split('|').sort()).toEqual(['Bash', 'Edit', 'MultiEdit', 'NotebookEdit', 'Write']);
     expect(group!.hooks.every((h) => h.type === 'command')).toBe(true);
   });
 
