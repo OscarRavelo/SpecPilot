@@ -17,6 +17,8 @@ It is a TypeScript CLI: sources in `src/`, compiled to `dist/`, tests in `test/*
 - The tests agent never edits source code.
 - Nobody marks a task done without running `npm test` and showing the output.
 - No task is done until the mutation phase (Stryker) has run.
+- Tests and code are always written by two different agents, a tests agent and a code agent, including while building SpecPilot itself. The orchestrating session writes neither.
+- A surviving mutant in the mutation phase is a test gap, and nobody adds tests in mutation. The agent stops, reports the gap and runs `specpilot reopen <task> red`. Then the tests agent writes the missing test (it must fail first: `specpilot tdd red <task>`), the code agent goes back to green (`specpilot tdd green <task>`), and mutation runs again.
 
 ## Phases
 
