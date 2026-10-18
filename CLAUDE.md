@@ -47,8 +47,15 @@ npm run typecheck   # tsc type check, no emit
 npm run build       # compile src/ → dist/
 ```
 
-Stryker is not set up yet: `specpilot mutate` is planned (README roadmap step 7).
-Until then the mutation phase cannot be completed.
+Mutation phase (Stryker is a devDependency):
+
+```
+npx specpilot mutate <task>           # Stryker over the task's code; survivors go to equivalents.md
+npx specpilot mutate bug <task> AC-n  # code-agent injects a bug for AC-n, then removes it
+```
+
+Only the human approves an equivalent mutant in `specs/<task>/equivalents.md`.
+Survivors in the CLI code (tests run `dist/cli.js`) are never approved as equivalents.
 
 ## Conventions
 

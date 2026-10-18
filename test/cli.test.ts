@@ -11,6 +11,7 @@ const SPECS = path.join(__dirname, 'fixtures', 'specs');
 const runIn = (cwd: string, ...args: string[]) =>
   spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', cwd });
 const run = (...args: string[]) => runIn(process.cwd(), ...args);
+const sha256 = (text: string) => crypto.createHash('sha256').update(text).digest('hex');
 
 describe('specpilot CLI', () => {
   test('--help lists the v0.1 commands', () => {
@@ -20,6 +21,12 @@ describe('specpilot CLI', () => {
     for (const command of ['init', 'spec lint', 'ledger check', 'grill checklist', 'grill hash', 'hook pre-tool-use', 'hook stop', 'gate', 'reopen', 'tdd', 'mutate', 'verify', 'report', 'status']) {
       expect(result.stdout).toContain(command);
     }
+  });
+
+  test('--help lists mutate and mutate bug', () => {
+    const result = run('--help');
+    expect(result.stdout).toContain('mutate <task>');
+    expect(result.stdout).toContain('mutate bug <task> AC-n');
   });
 
   test('no arguments prints help and exits 1', () => {
@@ -535,6 +542,7 @@ describe('specpilot tdd', () => {
       at: expect.any(String),
       tests: ['adds'],
       testFiles: { 'test/sum.test.js': expect.stringMatching(/^[0-9a-f]{64}$/) },
+      sourceFiles: { 'src/sum.js': sha256('exports.sum = () => 0;\n') },
     });
   });
 
@@ -579,7 +587,11 @@ describe('specpilot tdd', () => {
     expect(green.stderr).toBe('');
     expect(green.status).toBe(0);
     expect(green.stdout).toContain('GREEN: TASK-101 (1 test passes, tests unchanged since red)');
-    expect(evidence('green')).toEqual({ ...evidence('red'), at: expect.any(String) });
+    expect(evidence('green')).toEqual({
+      ...evidence('red'),
+      at: expect.any(String),
+      sourceFiles: { 'src/sum.js': sha256('exports.sum = (a, b) => a + b;\n') },
+    });
 
     expect(runIn(project, 'gate', 'TASK-101').stdout).toContain('TASK-101: green → mutation');
   });
@@ -628,5 +640,485 @@ describe('specpilot tdd', () => {
     const result = runIn(project, 'tdd', 'red', 'TASK-404');
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('No task TASK-404');
+  });
+});
+
+describe('specpilot mutate', () => {
+  const NODE_MODULES = path.join(__dirname, '..', 'node_modules');
+  const RED_CODE = 'exports.sum = () => 0;\n';
+  const GREEN_CODE = 'exports.sum = (a, b) => a + b;\n';
+  const BUG_CODE = 'exports.sum = (a, b) => a - b;\n';
+  const AC_TEST = "const { sum } = require('../src/sum');\ntest('AC-1 adds two numbers', () => { expect(sum(1, 2)).toBe(3); });\n";
+  const UNNAMED_TEST = "const { sum } = require('../src/sum');\ntest('adds', () => { expect(sum(1, 2)).toBe(3); });\n";
+  const INSTALL = 'npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker';
+  let project: string;
+  const file = (name: string) => path.join(project, name);
+  const writeState = (phase: string) =>
+    fs.writeFileSync(file('specs/TASK-101/state.json'), JSON.stringify({ taskId: 'TASK-101', phase, history: [] }));
+  const evidenceFor = (code: string, testCode: string, withSource = true) => ({
+    taskId: 'TASK-101',
+    at: '2026-10-18T10:00:00.000Z',
+    tests: [],
+    testFiles: { 'test/sum.test.js': sha256(testCode) },
+    ...(withSource ? { sourceFiles: { 'src/sum.js': sha256(code) } } : {}),
+  });
+  // A task that went through red and green: red.json saw the stub, green.json the finished code.
+  const setUp = (testCode: string, { greenSource = true } = {}) => {
+    fs.mkdirSync(file('src'));
+    fs.mkdirSync(file('test'));
+    fs.mkdirSync(file('specs/TASK-101'), { recursive: true });
+    fs.copyFileSync(path.join(SPECS, 'valid.md'), file('specs/TASK-101/spec.md'));
+    fs.writeFileSync(file('src/sum.js'), GREEN_CODE);
+    fs.writeFileSync(file('test/sum.test.js'), testCode);
+    fs.writeFileSync(file('specs/TASK-101/red.json'), JSON.stringify(evidenceFor(RED_CODE, testCode)));
+    fs.writeFileSync(file('specs/TASK-101/green.json'), JSON.stringify(evidenceFor(GREEN_CODE, testCode, greenSource)));
+    writeState('mutation');
+  };
+  // Stands in for an installed Stryker: its `stryker` bin records each config in stryker-calls.json and
+  // reports the mutants listed in stryker-mutants.json (see test/fixtures/stryker/fake-stryker.js).
+  const fakeStryker = () => {
+    const dir = file('node_modules/@stryker-mutator/core');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: '@stryker-mutator/core', version: '0.0.0', main: 'index.js' }));
+    fs.writeFileSync(path.join(dir, 'index.js'), 'module.exports = {};\n');
+    fs.mkdirSync(file('node_modules/.bin'), { recursive: true });
+    fs.copyFileSync(path.join(__dirname, 'fixtures', 'stryker', 'fake-stryker.js'), file('node_modules/.bin/stryker'));
+    fs.chmodSync(file('node_modules/.bin/stryker'), 0o755);
+  };
+  const mutation = () => {
+    expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(true);
+    return JSON.parse(fs.readFileSync(file('specs/TASK-101/mutation.json'), 'utf8'));
+  };
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-mutate-cli-'));
+    fs.writeFileSync(
+      file('package.json'),
+      JSON.stringify({ name: 'demo', private: true, scripts: { test: 'jest' }, jest: { testEnvironment: 'node' } }),
+    );
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  describe('checks before running Stryker', () => {
+    beforeEach(() => {
+      setUp(AC_TEST);
+      fakeStryker();
+    });
+
+    test.each([[['mutate']], [['mutate', 'bug']], [['mutate', 'bug', 'TASK-101']]])('%j prints usage', (args) => {
+      const result = runIn(project, ...args);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Usage: specpilot mutate');
+    });
+
+    test('mutate on a missing task exits 1', () => {
+      const result = runIn(project, 'mutate', 'TASK-404');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('No task TASK-404');
+    });
+
+    test('mutate runs only in the mutation phase', () => {
+      writeState('green');
+      for (const args of [['mutate', 'TASK-101'], ['mutate', 'bug', 'TASK-101', 'AC-1']]) {
+        const result = runIn(project, ...args);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('TASK-101 is in green');
+        expect(result.stderr).toContain('runs only in the mutation phase');
+      }
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
+    test('mutate refuses source code that differs from green.json and names the file', () => {
+      fs.writeFileSync(file('src/sum.js'), BUG_CODE);
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('src/sum.js');
+      expect(result.stderr).toContain('green');
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
+    test('mutate refuses tests that differ from green.json and names the file', () => {
+      fs.writeFileSync(file('test/sum.test.js'), UNNAMED_TEST);
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('test/sum.test.js');
+    });
+
+    test('mutate needs sourceFiles in green.json and asks to rerun tdd green', () => {
+      fs.writeFileSync(file('specs/TASK-101/green.json'), JSON.stringify(evidenceFor(GREEN_CODE, AC_TEST, false)));
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('specpilot tdd green TASK-101');
+    });
+
+    test('mutate fails when the task changed no source code', () => {
+      fs.writeFileSync(file('specs/TASK-101/red.json'), JSON.stringify(evidenceFor(GREEN_CODE, AC_TEST)));
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('no task code to mutate');
+    });
+
+    test('mutate bug needs an AC that is in the spec', () => {
+      fs.writeFileSync(file('src/sum.js'), BUG_CODE);
+      const result = runIn(project, 'mutate', 'bug', 'TASK-101', 'AC-9');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('AC-9');
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
+    test('mutate bug refuses source code identical to green.json: no bug was injected', () => {
+      const result = runIn(project, 'mutate', 'bug', 'TASK-101', 'AC-1');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/no bug/i);
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
+    test('mutate bug refuses tests that differ from green.json', () => {
+      fs.writeFileSync(file('src/sum.js'), BUG_CODE);
+      fs.writeFileSync(file('test/sum.test.js'), UNNAMED_TEST);
+      const result = runIn(project, 'mutate', 'bug', 'TASK-101', 'AC-1');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe('Tests changed after tdd green (changed test/sum.test.js): go back with specpilot reopen TASK-101 red\n');
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
+    test.each([[['mutate', 'TASK-101']], [['mutate', 'bug', 'TASK-101', 'AC-1']]])('%j needs green.json', (args) => {
+      fs.rmSync(file('specs/TASK-101/green.json'));
+      const result = runIn(project, ...args);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe('Missing green.json: run specpilot tdd green TASK-101 first\n');
+    });
+
+    test('mutate bug needs sourceFiles in green.json', () => {
+      fs.writeFileSync(file('specs/TASK-101/green.json'), JSON.stringify(evidenceFor(GREEN_CODE, AC_TEST, false)));
+      fs.writeFileSync(file('src/sum.js'), BUG_CODE);
+      const result = runIn(project, 'mutate', 'bug', 'TASK-101', 'AC-1');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('green.json has no source file hashes');
+      expect(result.stderr).toContain('specpilot tdd green TASK-101');
+    });
+  });
+
+  // The stand-in Stryker answers instantly, so what mutate does with a report can be tested quickly.
+  describe('mutate, with a stand-in Stryker', () => {
+    const A_RED = 'exports.a = () => 0;\n';
+    const A_GREEN = 'exports.a = (x) => x + 1;\n';
+    const B_RED = 'exports.b = () => 0;\n';
+    const B_GREEN = 'exports.b = (x) => x * 2;\n';
+    const B_MUTANT = 'exports.b = (x) => x / 2;\n';
+    const TEST = "test('AC-1 a', () => {});\ntest('AC-2 b', () => {});\n";
+    const strykerMutant = (line: number, replacement: string, status: string) => ({
+      id: String(line),
+      mutatorName: 'ArithmeticOperator',
+      replacement,
+      status,
+      location: { start: { line, column: 1 }, end: { line, column: 9 } },
+    });
+    const A_SURVIVOR = 'src/a.js:1 ArithmeticOperator x - 1';
+    const B_SURVIVOR = 'src/b.js:1 ArithmeticOperator x / 2';
+    const hashes = (files: Record<string, string>) =>
+      Object.fromEntries(Object.entries(files).map(([name, text]) => [name, sha256(text)]));
+    const writeEvidence = (stage: string, sourceFiles: Record<string, string>) =>
+      fs.writeFileSync(
+        file(`specs/TASK-101/${stage}.json`),
+        JSON.stringify({ taskId: 'TASK-101', at: '2026-10-18T10:00:00.000Z', tests: [], testFiles: hashes({ 'test/ab.test.js': TEST }), sourceFiles: hashes(sourceFiles) }),
+      );
+    const writeMutation = (overrides: Record<string, unknown>) =>
+      fs.writeFileSync(
+        file('specs/TASK-101/mutation.json'),
+        JSON.stringify({ taskId: 'TASK-101', at: '2026-10-18T10:10:00.000Z', sourceFiles: {}, testFiles: {}, mutants: [], bugs: [], ...overrides }),
+      );
+    const strykerReports = (plan: Record<string, unknown[]>) => fs.writeFileSync(file('stryker-mutants.json'), JSON.stringify(plan));
+    const strykerCalls = () => JSON.parse(fs.readFileSync(file('stryker-calls.json'), 'utf8'));
+    const equivalents = () => fs.readFileSync(file('specs/TASK-101/equivalents.md'), 'utf8');
+
+    beforeEach(() => {
+      fs.mkdirSync(file('src'));
+      fs.mkdirSync(file('test'));
+      fs.mkdirSync(file('specs/TASK-101'), { recursive: true });
+      fs.copyFileSync(path.join(SPECS, 'valid.md'), file('specs/TASK-101/spec.md'));
+      fs.writeFileSync(file('src/a.js'), A_GREEN);
+      fs.writeFileSync(file('src/b.js'), B_GREEN);
+      fs.writeFileSync(file('test/ab.test.js'), TEST);
+      writeState('mutation');
+      fakeStryker();
+    });
+
+    test('the first run mutates the files the task changed and records them', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_RED });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      strykerReports({ 'src/a.js': [strykerMutant(1, 'x - 1', 'Survived')], 'src/b.js': [strykerMutant(1, 'x / 2', 'Killed')] });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.status).toBe(1);
+      expect([...strykerCalls()[0].mutate].sort()).toEqual(['src/a.js', 'src/b.js']);
+      expect(mutation().files).toEqual(['src/a.js', 'src/b.js']);
+    });
+
+    // The reopen loop: after reopen, tdd red sees the earlier code with only the mutant put back in
+    // b.js, so red and green differ only in b.js. a.js still has a survivor and must not be forgotten.
+    test('after a reopen, files mutated before are mutated again and their survivors stay', () => {
+      writeEvidence('red', { 'src/a.js': A_GREEN, 'src/b.js': B_MUTANT });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      writeMutation({
+        sourceFiles: hashes({ 'src/a.js': A_GREEN, 'src/b.js': B_GREEN }),
+        testFiles: hashes({ 'test/ab.test.js': "test('AC-1 a', () => {});\n" }),
+        files: ['src/a.js', 'src/b.js'],
+        mutants: [
+          { id: A_SURVIVOR, file: 'src/a.js', line: 1, mutator: 'ArithmeticOperator', replacement: 'x - 1', status: 'Survived' },
+          { id: B_SURVIVOR, file: 'src/b.js', line: 1, mutator: 'ArithmeticOperator', replacement: 'x / 2', status: 'Survived' },
+        ],
+      });
+      strykerReports({ 'src/a.js': [strykerMutant(1, 'x - 1', 'Survived')], 'src/b.js': [strykerMutant(1, 'x / 2', 'Killed')] });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect([...strykerCalls()[0].mutate].sort()).toEqual(['src/a.js', 'src/b.js']);
+      expect(mutation().files).toEqual(['src/a.js', 'src/b.js']);
+      expect(mutation().mutants.map((m: { id: string }) => m.id)).toContain(A_SURVIVOR);
+      expect(equivalents()).toContain(`### ${A_SURVIVOR}`);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`✕ ${A_SURVIVOR} (Survived)`);
+      expect(result.stderr).toContain('specpilot reopen TASK-101 red');
+    });
+
+    test('a mutation.json without a files list still brings back the files of its mutants', () => {
+      writeEvidence('red', { 'src/a.js': A_GREEN, 'src/b.js': B_MUTANT });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      writeMutation({
+        sourceFiles: hashes({ 'src/a.js': A_GREEN, 'src/b.js': B_GREEN }),
+        mutants: [{ id: A_SURVIVOR, file: 'src/a.js', line: 1, mutator: 'ArithmeticOperator', replacement: 'x - 1', status: 'Survived' }],
+      });
+
+      runIn(project, 'mutate', 'TASK-101');
+      expect([...strykerCalls()[0].mutate].sort()).toEqual(['src/a.js', 'src/b.js']);
+    });
+
+    test('a file mutated before stays in the set even if Stryker found no mutants in it', () => {
+      writeEvidence('red', { 'src/a.js': A_GREEN, 'src/b.js': B_MUTANT });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      writeMutation({ sourceFiles: hashes({ 'src/a.js': A_GREEN, 'src/b.js': B_GREEN }), files: ['src/a.js', 'src/b.js'], mutants: [] });
+
+      runIn(project, 'mutate', 'TASK-101');
+      expect([...strykerCalls()[0].mutate].sort()).toEqual(['src/a.js', 'src/b.js']);
+      expect(mutation().files).toEqual(['src/a.js', 'src/b.js']);
+    });
+
+    test('Pending, RuntimeError and Ignored mutants go to equivalents.md and fail mutate', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_GREEN });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      strykerReports({
+        'src/a.js': [strykerMutant(1, 'x - 1', 'Pending'), strykerMutant(2, 'x * 1', 'RuntimeError'), strykerMutant(3, 'x / 1', 'Ignored')],
+      });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      for (const [line, replacement, status] of [[1, 'x - 1', 'Pending'], [2, 'x * 1', 'RuntimeError'], [3, 'x / 1', 'Ignored']]) {
+        const id = `src/a.js:${line} ArithmeticOperator ${replacement}`;
+        expect(equivalents()).toContain(`### ${id}\n- Approved: no`);
+        expect(result.stderr).toContain(`✕ ${id} (${status})`);
+      }
+      expect(result.status).toBe(1);
+    });
+
+    test('keeps the targeted bugs already recorded', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_GREEN });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      const recorded = { ac: 'AC-1', caught: true, at: '2026-10-18T10:05:00.000Z', sourceFiles: {}, testFiles: {}, failing: ['AC-1 a'] };
+      writeMutation({ bugs: [recorded] });
+
+      expect(runIn(project, 'mutate', 'TASK-101').status).toBe(0);
+      expect(mutation().bugs).toEqual([recorded]);
+    });
+
+    test('a project without tsconfig.json gets no TypeScript checker', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_GREEN });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      runIn(project, 'mutate', 'TASK-101');
+      expect(strykerCalls()[0].checkers ?? []).toEqual([]);
+    });
+
+    test('a Stryker run that writes no report exits 1 without a stack trace', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_GREEN });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      fs.writeFileSync(file('stryker-mutants.json'), JSON.stringify('no-report'));
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe('Stryker did not write a JSON report: see its output above\n');
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
+    // A Stryker run that failed part way may still write a report, but it is not one to trust.
+    const expectStrykerExitError = (result: { status: number | null; stderr: string }, code: number) => {
+      expect(result.status).toBe(1);
+      expect(result.stderr.endsWith('\n')).toBe(true);
+      expect(result.stderr.trimEnd().split('\n')).toHaveLength(1);
+      expect(result.stderr).toContain('Stryker');
+      expect(result.stderr).toMatch(/exit/i);
+      expect(result.stderr).toMatch(new RegExp(`\\b${code}\\b`));
+    };
+
+    test('a Stryker run that exits non-zero fails mutate even if it wrote a report, and writes no evidence', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_GREEN });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      strykerReports({ 'src/a.js': [strykerMutant(1, 'x - 1', 'Killed')] });
+      fs.writeFileSync(file('stryker-exit.json'), '3');
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(strykerCalls()).toHaveLength(1);
+      expectStrykerExitError(result, 3);
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+      expect(fs.existsSync(file('specs/TASK-101/equivalents.md'))).toBe(false);
+    });
+
+    test('a Stryker run that exits non-zero leaves an earlier mutation.json and equivalents.md untouched', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_GREEN });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      writeMutation({
+        sourceFiles: hashes({ 'src/a.js': A_GREEN, 'src/b.js': B_GREEN }),
+        testFiles: hashes({ 'test/ab.test.js': TEST }),
+        files: ['src/a.js'],
+        mutants: [{ id: A_SURVIVOR, file: 'src/a.js', line: 1, mutator: 'ArithmeticOperator', replacement: 'x - 1', status: 'Survived' }],
+      });
+      const previousEquivalents = `# Equivalent mutants: TASK-101\n\n### ${A_SURVIVOR}\n- Approved: yes\n- Reason: checked by the human\n`;
+      fs.writeFileSync(file('specs/TASK-101/equivalents.md'), previousEquivalents);
+      const previousMutation = fs.readFileSync(file('specs/TASK-101/mutation.json'), 'utf8');
+      strykerReports({ 'src/a.js': [strykerMutant(1, 'x - 1', 'Killed')] });
+      fs.writeFileSync(file('stryker-exit.json'), '2');
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expectStrykerExitError(result, 2);
+      expect(fs.readFileSync(file('specs/TASK-101/mutation.json'), 'utf8')).toBe(previousMutation);
+      expect(equivalents()).toBe(previousEquivalents);
+    });
+  });
+
+  test('mutate says how to install Stryker when the project does not have it', () => {
+    setUp(AC_TEST);
+    const result = runIn(project, 'mutate', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(INSTALL);
+  });
+
+  // A real project: the targeted bug runs through npm test, as it would in a target project.
+  describe('mutate bug, with real tests', () => {
+    beforeEach(() => fs.symlinkSync(NODE_MODULES, file('node_modules')));
+
+    test('a bug caught by a test named with the AC is recorded as caught', () => {
+      setUp(AC_TEST);
+      fs.writeFileSync(file('src/sum.js'), BUG_CODE);
+      const result = runIn(project, 'mutate', 'bug', 'TASK-101', 'AC-1');
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('AC-1');
+      expect(result.stdout).toContain('Now remove the bug: the code must be exactly what tdd green saw before specpilot gate TASK-101');
+      // testFiles ties the bug to the tests of this green: a bug from an earlier round does not count.
+      expect(mutation().bugs).toEqual([
+        {
+          ac: 'AC-1',
+          caught: true,
+          at: expect.any(String),
+          sourceFiles: { 'src/sum.js': sha256(BUG_CODE) },
+          testFiles: { 'test/sum.test.js': sha256(AC_TEST) },
+          failing: ['AC-1 adds two numbers'],
+        },
+      ]);
+    });
+
+    test('a bug caught only by a test without the AC in its name is recorded as not caught', () => {
+      setUp(UNNAMED_TEST);
+      fs.writeFileSync(file('src/sum.js'), BUG_CODE);
+      const result = runIn(project, 'mutate', 'bug', 'TASK-101', 'AC-1');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('NOT CAUGHT: the bug for AC-1 in TASK-101 is a test gap:');
+      expect(result.stderr).toContain('No test with AC-1 in its name fails on an assertion');
+      expect(result.stderr).toContain('specpilot reopen TASK-101 red');
+      expect(mutation().bugs).toEqual([
+        expect.objectContaining({ ac: 'AC-1', caught: false, failing: ['adds'], testFiles: { 'test/sum.test.js': sha256(UNNAMED_TEST) } }),
+      ]);
+    });
+
+    test('each targeted bug is added to the ones already in mutation.json', () => {
+      setUp(AC_TEST);
+      fs.writeFileSync(file('src/sum.js'), BUG_CODE);
+      expect(runIn(project, 'mutate', 'bug', 'TASK-101', 'AC-1').status).toBe(0);
+      expect(runIn(project, 'mutate', 'bug', 'TASK-101', 'AC-2').status).toBe(1);
+      expect(mutation().bugs.map((record: { ac: string; caught: boolean }) => [record.ac, record.caught])).toEqual([
+        ['AC-1', true],
+        ['AC-2', false],
+      ]);
+    });
+
+    test('a bug that does not even load is not counted as caught', () => {
+      setUp(AC_TEST);
+      fs.writeFileSync(file('src/sum.js'), 'exports.sum = (a, b) => a +;\n');
+      const result = runIn(project, 'mutate', 'bug', 'TASK-101', 'AC-1');
+      expect(result.status).toBe(1);
+      expect(mutation().bugs).toEqual([expect.objectContaining({ ac: 'AC-1', caught: false })]);
+    });
+  });
+
+  // Real Stryker, from this repo's node_modules (symlinked into the project), over a plain-JS project
+  // without tsconfig.json. Zero is never tested, so "n >= 0" is the one mutant that survives.
+  describe('mutate, with real Stryker', () => {
+    const POSITIVE_RED = 'exports.isPositive = () => false;\n';
+    const POSITIVE = 'exports.isPositive = (n) => n > 0;\n';
+    const POSITIVE_TEST = [
+      "const { isPositive } = require('../src/positive');",
+      "test('AC-1 five is positive', () => { expect(isPositive(5)).toBe(true); });",
+      "test('AC-2 minus one is not positive', () => { expect(isPositive(-1)).toBe(false); });",
+      '',
+    ].join('\n');
+    const SURVIVOR = 'src/positive.js:1 EqualityOperator n >= 0';
+    const evidence = (code: string) => ({
+      taskId: 'TASK-101',
+      at: '2026-10-18T10:00:00.000Z',
+      tests: [],
+      testFiles: { 'test/positive.test.js': sha256(POSITIVE_TEST) },
+      sourceFiles: { 'src/positive.js': sha256(code) },
+    });
+    const headings = (text: string) => text.split('\n').filter((line) => line.startsWith('### '));
+
+    beforeEach(() => {
+      fs.symlinkSync(NODE_MODULES, file('node_modules'));
+      fs.mkdirSync(file('src'));
+      fs.mkdirSync(file('test'));
+      fs.mkdirSync(file('specs/TASK-101'), { recursive: true });
+      fs.copyFileSync(path.join(SPECS, 'valid.md'), file('specs/TASK-101/spec.md'));
+      fs.writeFileSync(file('src/positive.js'), POSITIVE);
+      fs.writeFileSync(file('test/positive.test.js'), POSITIVE_TEST);
+      fs.writeFileSync(file('specs/TASK-101/red.json'), JSON.stringify(evidence(POSITIVE_RED)));
+      fs.writeFileSync(file('specs/TASK-101/green.json'), JSON.stringify(evidence(POSITIVE)));
+      writeState('mutation');    });
+
+    test(
+      'a weak test leaves a survivor; once the human approves it, mutate keeps the approval and passes',
+      () => {
+        const first = runIn(project, 'mutate', 'TASK-101');
+        const equivalentsFile = file('specs/TASK-101/equivalents.md');
+        expect(fs.existsSync(equivalentsFile)).toBe(true);
+
+        const { mutants } = mutation();
+        expect(mutants.length).toBeGreaterThan(1);
+        const survived = mutants.filter((m: { status: string }) => m.status === 'Survived').map((m: { id: string }) => m.id);
+        expect(survived).toEqual([SURVIVOR]);
+        expect(headings(fs.readFileSync(equivalentsFile, 'utf8'))).toEqual([`### ${SURVIVOR}`]);
+        expect(first.status).toBe(1);
+        expect(first.stderr).toContain(`✕ ${SURVIVOR} (Survived)`);
+        expect(first.stderr).toContain('specpilot reopen TASK-101 red');
+
+        // Only the human approves an equivalent; here the test plays the human.
+        fs.writeFileSync(
+          equivalentsFile,
+          fs.readFileSync(equivalentsFile, 'utf8').replace('- Approved: no', '- Approved: yes').replace('- Reason: ', '- Reason: zero is out of scope'),
+        );
+        const second = runIn(project, 'mutate', 'TASK-101');
+        expect(second.stderr).not.toContain(SURVIVOR);
+        expect(second.status).toBe(0);
+        expect(second.stdout).toContain('Next: inject a bug for each AC and run specpilot mutate bug TASK-101 AC-n, then specpilot gate TASK-101');
+        const kept = fs.readFileSync(equivalentsFile, 'utf8');
+        expect(kept).toContain(`### ${SURVIVOR}\n- Approved: yes\n- Reason: zero is out of scope`);
+        expect(fs.existsSync(file('.stryker-tmp'))).toBe(false);
+      },
+      240_000,
+    );
   });
 });

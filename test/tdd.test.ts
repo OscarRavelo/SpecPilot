@@ -1,8 +1,11 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import {
   failingTests,
+  fileHashes,
+  taskSourceFiles,
   greenProblems,
   hashChanges,
   passingTests,
@@ -11,7 +14,7 @@ import {
   testFileHashes,
   writeEvidence,
 } from '../src/tdd';
-import type { JestAssertion, JestReport, JestSuite } from '../src/tdd';
+import type { Evidence, JestAssertion, JestReport, JestSuite } from '../src/tdd';
 
 // Shapes taken from a real Jest 30 --json report.
 const ROOT = '/project';
@@ -170,6 +173,82 @@ describe('testFileHashes', () => {
     const before = testFileHashes(root);
     write('test/a.test.js', 'a2');
     expect(testFileHashes(root)['test/a.test.js']).not.toBe(before['test/a.test.js']);
+  });
+});
+
+describe('fileHashes', () => {
+  let root: string;
+  const write = (file: string, text: string) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), text);
+  };
+  const sha256 = (text: string) => crypto.createHash('sha256').update(text).digest('hex');
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-hashes-'));
+    write('src/b.ts', 'code');
+    write('src/a/c.tsx', 'component');
+    write('server.js', 'server');
+    write('lib/index.mjs', 'lib');
+    write('src/b.test.ts', 'test');
+    write('test/a.test.js', 'a');
+    write('test/fixtures/user.json', '{}');
+    write('README.md', 'docs');
+    write('package.json', '{}');
+    write('specs/TASK-101/state.json', '{}');
+    for (const dir of ['node_modules/lib', 'dist', 'build', 'coverage', '.git/hooks']) write(`${dir}/x.js`, 'skipped');
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  test('source hashes every source file, sorted by path, and skips tests and build folders', () => {
+    const hashes = fileHashes(root, 'source');
+    expect(hashes).toEqual({
+      'lib/index.mjs': sha256('lib'),
+      'server.js': sha256('server'),
+      'src/a/c.tsx': sha256('component'),
+      'src/b.ts': sha256('code'),
+    });
+    expect(Object.keys(hashes)).toEqual(['lib/index.mjs', 'server.js', 'src/a/c.tsx', 'src/b.ts']);
+  });
+
+  test('test gives the same hashes as testFileHashes', () => {
+    expect(fileHashes(root, 'test')).toEqual(testFileHashes(root));
+    expect(Object.keys(fileHashes(root, 'test'))).toEqual(['src/b.test.ts', 'test/a.test.js', 'test/fixtures/user.json']);
+  });
+
+  // Stryker's sandbox copies of the project and its reports are not the project's code or tests.
+  test.each(['.stryker-tmp', 'reports'])('skips the %s folder Stryker writes, for source and for tests', (dir) => {
+    write(`${dir}/sandbox-1/src/b.ts`, 'sandbox copy');
+    write(`${dir}/sandbox-1/test/a.test.js`, 'sandbox copy');
+    write(`${dir}/x.js`, 'skipped');
+    expect(Object.keys(fileHashes(root, 'source'))).toEqual(['lib/index.mjs', 'server.js', 'src/a/c.tsx', 'src/b.ts']);
+    expect(Object.keys(fileHashes(root, 'test'))).toEqual(['src/b.test.ts', 'test/a.test.js', 'test/fixtures/user.json']);
+    expect(Object.keys(testFileHashes(root))).toEqual(['src/b.test.ts', 'test/a.test.js', 'test/fixtures/user.json']);
+  });
+});
+
+describe('taskSourceFiles', () => {
+  const evidence = (sourceFiles?: Record<string, string>): Evidence => ({
+    taskId: 'TASK-101',
+    at: '2026-10-18T10:00:00.000Z',
+    tests: [],
+    testFiles: {},
+    ...(sourceFiles ? { sourceFiles } : {}),
+  });
+
+  test('lists the source files changed or added between red and green, sorted, not removed ones', () => {
+    const red = evidence({ 'src/z.ts': '1', 'src/same.ts': '2', 'src/removed.ts': '3' });
+    const green = evidence({ 'src/z.ts': 'x', 'src/same.ts': '2', 'src/a.ts': '4' });
+    expect(taskSourceFiles(red, green)).toEqual(['src/a.ts', 'src/z.ts']);
+  });
+
+  test('is empty when the code did not change, or when an evidence file has no sourceFiles', () => {
+    const red = evidence({ 'src/a.ts': '1' });
+    const green = evidence({ 'src/a.ts': '2' });
+    expect(taskSourceFiles(red, green)).toEqual(['src/a.ts']);
+    expect(taskSourceFiles(red, red)).toEqual([]);
+    expect(taskSourceFiles(evidence(), green)).toEqual([]);
+    expect(taskSourceFiles(red, evidence())).toEqual([]);
   });
 });
 

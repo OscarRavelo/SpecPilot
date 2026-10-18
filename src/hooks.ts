@@ -20,6 +20,8 @@ const EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 const TEST_DIRS = ['test', 'tests', '__tests__'];
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/;
+// Files in specs/<task>/ that only the CLI writes; equivalents.md is approved by the human, never by an agent.
+const STATE_FILES = ['state.json', 'red.json', 'green.json', 'mutation.json', 'equivalents.md'];
 
 // Red is for writing tests, green and mutation for changing code; every other phase is read-only.
 const EDITABLE: Record<Phase, FileKind[]> = {
@@ -41,7 +43,7 @@ export function classifyPath(relPath: string): FileKind {
   const parts = relPath.split('/');
   const name = parts[parts.length - 1];
   if (parts.length === 3 && parts[0] === 'specs') {
-    if (name === 'state.json' || name === 'red.json' || name === 'green.json') return 'state';
+    if (STATE_FILES.includes(name)) return 'state';
     if (name === 'audit.md') return 'audit';
   }
   if (TEST_FILE.test(name) || parts.slice(0, -1).some((part) => TEST_DIRS.includes(part))) return 'test';
@@ -258,7 +260,10 @@ function checkFile(target: string, root: string, agentType: string | undefined, 
   const kind = classifyPath(file);
 
   if (kind === 'state') {
-    return deny(`${file} is written only by the specpilot CLI (specpilot tdd, specpilot gate, specpilot reopen).`);
+    if (file.endsWith('/equivalents.md')) {
+      return deny(`${file} is written by specpilot mutate, and only the human approves equivalent mutants in it.`);
+    }
+    return deny(`${file} is written only by the specpilot CLI (specpilot tdd, specpilot mutate, specpilot gate, specpilot reopen).`);
   }
   if (kind === 'audit') {
     return agentType === 'grill-auditor' ? allow() : deny(`${file} is written only by the grill-auditor subagent.`);
@@ -286,8 +291,8 @@ function checkFile(target: string, root: string, agentType: string | undefined, 
   return allow();
 }
 
-// Until specpilot mutate exists, a task that reached mutation cannot finish. Blocking the stop would
-// leave the agent looping with nothing it can do, so the Stop hook only says the task is not done.
+// A task in mutation or verify is not done yet. Blocking the stop could leave the agent looping, so the
+// Stop hook only says what is still missing.
 export function stopWarning(root: string, taskId?: string): string | null {
   let tasks: { taskId: string; phase: Phase }[];
   try {
@@ -298,9 +303,10 @@ export function stopWarning(root: string, taskId?: string): string | null {
   const waiting = tasks.filter((task) => task.phase === 'mutation' || task.phase === 'verify');
   if (waiting.length === 0) return null;
   return waiting
-    .map(
-      (task) =>
-        `${task.taskId} is in ${task.phase}: the mutation phase cannot be completed yet (specpilot mutate is not implemented), so the task is not done.`,
+    .map((task) =>
+      task.phase === 'mutation'
+        ? `${task.taskId} is in mutation, so the task is not done: run specpilot mutate ${task.taskId} and specpilot gate ${task.taskId}.`
+        : `${task.taskId} is in verify, so the task is not done: the verify phase cannot be completed yet (specpilot verify is not implemented).`,
     )
     .join(' ');
 }

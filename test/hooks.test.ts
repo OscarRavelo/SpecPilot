@@ -11,6 +11,8 @@ describe('classifyPath', () => {
     ['specs/TASK-101/audit.md', 'audit'],
     ['specs/TASK-101/red.json', 'state'],
     ['specs/TASK-101/green.json', 'state'],
+    ['specs/TASK-1/mutation.json', 'state'],
+    ['specs/TASK-1/equivalents.md', 'state'],
     ['src/users.test.ts', 'test'],
     ['src/Button.spec.tsx', 'test'],
     ['src/__tests__/users.ts', 'test'],
@@ -270,6 +272,25 @@ describe('checkToolUse', () => {
     expect(decision.reason).toContain('specpilot gate');
   });
 
+  test('equivalents.md is never edited by an agent: only the human approves equivalent mutants', () => {
+    writeTask('TASK-101', 'mutation');
+    for (const agent of [undefined, 'code-agent', 'tests-agent']) {
+      expect(checkToolUse(edit('specs/TASK-101/equivalents.md', 'Write', { agent_type: agent }), root)).toEqual({
+        allow: false,
+        reason: 'Blocked by SpecPilot: specs/TASK-101/equivalents.md is written by specpilot mutate, and only the human approves equivalent mutants in it.',
+      });
+    }
+  });
+
+  test('mutation.json is written only by the CLI, and the reason names specpilot mutate', () => {
+    writeTask('TASK-101', 'mutation');
+    expect(checkToolUse(edit('specs/TASK-101/mutation.json', 'Write'), root)).toEqual({
+      allow: false,
+      reason:
+        'Blocked by SpecPilot: specs/TASK-101/mutation.json is written only by the specpilot CLI (specpilot tdd, specpilot mutate, specpilot gate, specpilot reopen).',
+    });
+  });
+
   test('audit.md can only be written by the grill-auditor subagent', () => {
     writeTask('TASK-101', 'grill');
     const file = 'specs/TASK-101/audit.md';
@@ -523,11 +544,31 @@ describe('stopWarning', () => {
     expect(stopWarning(root)).toBeNull();
   });
 
-  test.each(['mutation', 'verify'])('a task in %s is reported as not done', (phase) => {
-    writeTask('TASK-101', phase);
+  test('a task in mutation is told to run specpilot mutate and specpilot gate', () => {
+    writeTask('TASK-101', 'mutation');
+    const warning = stopWarning(root) as string;
+    expect(warning).toContain('TASK-101 is in mutation');
+    expect(warning).toContain('specpilot mutate TASK-101');
+    expect(warning).toContain('specpilot gate TASK-101');
+    expect(warning).not.toContain('not implemented');
+  });
+
+  test('the exact warnings for mutation and verify', () => {
+    writeTask('TASK-101', 'mutation');
     expect(stopWarning(root)).toBe(
-      `TASK-101 is in ${phase}: the mutation phase cannot be completed yet (specpilot mutate is not implemented), so the task is not done.`,
+      'TASK-101 is in mutation, so the task is not done: run specpilot mutate TASK-101 and specpilot gate TASK-101.',
     );
+    writeTask('TASK-101', 'verify');
+    expect(stopWarning(root)).toBe(
+      'TASK-101 is in verify, so the task is not done: the verify phase cannot be completed yet (specpilot verify is not implemented).',
+    );
+  });
+
+  test('a task in verify is still reported as not done', () => {
+    writeTask('TASK-101', 'verify');
+    const warning = stopWarning(root) as string;
+    expect(warning).toContain('TASK-101 is in verify');
+    expect(warning).not.toContain('specpilot mutate is not implemented');
   });
 
   test('every waiting task is listed', () => {

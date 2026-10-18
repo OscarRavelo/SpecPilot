@@ -4,7 +4,8 @@ import { parseSpec, lintSpec } from './spec';
 import { checklistFor } from './checklist';
 import { checkLedger, parseLedger } from './ledger';
 import { ledgerHash, parseAudit } from './audit';
-import { hashChanges, readEvidence, testFileHashes } from './tdd';
+import { fileHashes, hashChanges, readEvidence, testFileHashes } from './tdd';
+import { missingSourceHashes, parseEquivalents, readMutationEvidence, unapprovedSurvivors } from './mutation';
 import type { Phase } from './state';
 
 export interface GateResult {
@@ -125,11 +126,81 @@ function greenGate(taskDir: string, projectRoot: string): GateResult {
   return pass();
 }
 
+// Mutation closes only if every mutant is killed or approved as equivalent and every AC has a caught bug.
+// The code must also be byte for byte what tdd green saw, so a targeted bug left in the code is caught,
+// and Stryker must have run over exactly that code and those tests.
+function mutationGate(taskDir: string, projectRoot: string): GateResult {
+  const taskId = path.basename(taskDir);
+  const green = readEvidence(taskDir, 'green');
+  if (!green) return fail(`Missing green.json: run specpilot tdd green ${taskId}`);
+  if (!green.sourceFiles) return fail(missingSourceHashes(taskId, 'green'));
+  const mutation = readMutationEvidence(taskDir);
+  if (!mutation) return fail(`Missing mutation.json: run specpilot mutate ${taskId}`);
+  if (mutation.taskId !== taskId) {
+    return fail(`mutation.json belongs to ${mutation.taskId}, not ${taskId}: run specpilot mutate ${taskId}`);
+  }
+
+  const sourceFiles = fileHashes(projectRoot, 'source');
+  const testFiles = fileHashes(projectRoot, 'test');
+  const reasons: string[] = [];
+  const codeSinceGreen = hashChanges(green.sourceFiles, sourceFiles);
+  if (codeSinceGreen.length > 0) {
+    reasons.push(`Source code differs from tdd green (${codeSinceGreen.join(', ')}): remove the injected bug`);
+  }
+  const testsSinceGreen = hashChanges(green.testFiles, testFiles);
+  if (testsSinceGreen.length > 0) {
+    reasons.push(`Tests changed after tdd green (${testsSinceGreen.join(', ')}): go back with specpilot reopen ${taskId} red`);
+  }
+  if (reasons.length > 0) return fail(...reasons);
+
+  if (Object.keys(mutation.sourceFiles).length === 0) {
+    reasons.push(`Stryker has not run yet: run specpilot mutate ${taskId}`);
+  } else {
+    const stale = [...hashChanges(mutation.sourceFiles, sourceFiles), ...hashChanges(mutation.testFiles, testFiles)];
+    if (stale.length > 0) {
+      reasons.push(`Stryker ran over other code (${stale.join(', ')}): run specpilot mutate ${taskId} again`);
+    }
+  }
+
+  const equivalentsFile = path.join(taskDir, 'equivalents.md');
+  const equivalents = fs.existsSync(equivalentsFile) ? parseEquivalents(fs.readFileSync(equivalentsFile, 'utf8')) : [];
+  for (const mutant of unapprovedSurvivors(mutation.mutants, equivalents)) {
+    reasons.push(
+      `Surviving mutant ${mutant.id} (${mutant.status}): a test gap. Go back with specpilot reopen ${taskId} red, ` +
+        'unless the human approves it as equivalent in equivalents.md',
+    );
+  }
+
+  // Only bugs recorded after tdd green, against the tests green.json saw, count: one from an earlier
+  // round proves nothing about these tests. Of those, any missed one is a test gap, even if a later
+  // bug for the same AC was caught.
+  const greenAt = Date.parse(green.at);
+  const current = mutation.bugs.filter(
+    (record) =>
+      typeof record.testFiles === 'object' &&
+      record.testFiles !== null &&
+      hashChanges(green.testFiles, record.testFiles).length === 0 &&
+      Date.parse(record.at) > greenAt,
+  );
+  const spec = parseSpec(fs.readFileSync(path.join(taskDir, 'spec.md'), 'utf8'));
+  for (const ac of spec.acceptanceCriteria) {
+    const bugs = current.filter((record) => record.ac === ac.id);
+    if (bugs.length === 0) {
+      reasons.push(`${ac.id} has no targeted bug since tdd green: inject one and run specpilot mutate bug ${taskId} ${ac.id}`);
+    } else if (bugs.some((bug) => !bug.caught)) {
+      reasons.push(`No test caught the targeted bug for ${ac.id}: a test gap. Go back with specpilot reopen ${taskId} red`);
+    }
+  }
+
+  return reasons.length === 0 ? pass() : fail(...reasons);
+}
+
 const GATES: Partial<Record<Phase, Gate>> = {
   research: researchGate,
   grill: grillGate,
   red: redGate,
   green: greenGate,
+  mutation: mutationGate,
 };
 
 // Checks whether the current phase can be closed. A phase without an implemented gate never passes.

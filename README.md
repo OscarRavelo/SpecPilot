@@ -95,18 +95,30 @@ Phase hooks keep the agent inside the workflow. The [`settings.json` template](t
 | `green`, `mutation` | blocked | allowed |
 | `verify` | blocked | blocked |
 
-Test files are `*.test.*` / `*.spec.*` and anything under `test/`, `tests/` or `__tests__/`; source code is any other `.ts`, `.tsx`, `.js` or `.jsx` file (including `.mjs`/`.cjs`). Other files, such as docs, the spec and the grill ledger, can always be edited. `state.json`, `red.json` and `green.json` can never be edited by the agent (only the CLI writes them), and `audit.md` can only be written by the `grill-auditor` subagent. With no active task, nothing is blocked. With several active tasks, an edit must be allowed by all of them, unless `SPECPILOT_TASK=<task-id>` chooses the one you are working on. A corrupt `state.json` blocks code and test edits instead of letting them through. For `Bash`, the hook finds the files a command writes: redirections (`>`, `>>`, `2>`, `&>`), `tee`, `sed -i`, `perl -i`, `cp`, `mv`, `rm`, `touch`, `truncate` and `dd of=`, across `&&`, `||`, `;` and pipes, skipping heredoc bodies. Known limit: files written from inside a program (`node -e`, `python -c`, `git apply`, `git checkout -- <file>`) are not detected.
+Test files are `*.test.*` / `*.spec.*` and anything under `test/`, `tests/` or `__tests__/`; source code is any other `.ts`, `.tsx`, `.js` or `.jsx` file (including `.mjs`/`.cjs`). Other files, such as docs, the spec and the grill ledger, can always be edited. `state.json`, `red.json`, `green.json` and `mutation.json` can never be edited by the agent (only the CLI writes them), `equivalents.md` is approved only by the human, and `audit.md` can only be written by the `grill-auditor` subagent. With no active task, nothing is blocked. With several active tasks, an edit must be allowed by all of them, unless `SPECPILOT_TASK=<task-id>` chooses the one you are working on. A corrupt `state.json` blocks code and test edits instead of letting them through. For `Bash`, the hook finds the files a command writes: redirections (`>`, `>>`, `2>`, `&>`), `tee`, `sed -i`, `perl -i`, `cp`, `mv`, `rm`, `touch`, `truncate` and `dd of=`, across `&&`, `||`, `;` and pipes, skipping heredoc bodies. Known limit: files written from inside a program (`node -e`, `python -c`, `git apply`, `git checkout -- <file>`) are not detected.
 
 With `--roles` (`specpilot hook pre-tool-use --roles`), the hook also enforces agent roles by the `agent_type` Claude Code passes for subagents: test files may only be edited by `tests-agent`, source code only by `code-agent`, those two agents may edit nothing else, and the main session and other agents may not edit tests or source code at all. Both the role and the phase must allow an edit. Roles are off by default, so a project without these two agents keeps working.
 
-The same template registers `specpilot hook stop`, which runs whenever the agent stops. While `specpilot mutate` does not exist (step 7), a task in `mutation` or `verify` cannot be finished, so the hook does not block (that would leave the agent looping with nothing it can do): it shows a system message saying which tasks are not done, e.g. `TASK-101 is in mutation: the mutation phase cannot be completed yet (specpilot mutate is not implemented), so the task is not done.` Once `mutate` exists, the Stop hook will block a stop that claims a task is done before mutation has passed.
+The same template registers `specpilot hook stop`, which runs whenever the agent stops. It does not block (that could leave the agent looping), but it shows a system message for every task in `mutation` or `verify`, e.g. `TASK-101 is in mutation, so the task is not done: run specpilot mutate TASK-101 and specpilot gate TASK-101.` Blocking a false "done" claim is part of step 8 (`verify`).
 
 `specpilot tdd red <task>` and `specpilot tdd green <task>` run the project's tests with `npm test -- --json --outputFile=<tmp>` (so the `test` script must end with `jest`, e.g. `"jest"` or `"tsc && jest"`) and record evidence next to the spec:
 
 - **Red** (`red.json`): at least one test fails, every failure is an `expect` assertion, and no suite fails to run. A test that throws, a missing module or a compile error is not red.
 - **Green** (`green.json`): every test passes, and every test file is byte for byte the one recorded by `tdd red`: none changed, added or removed.
 
+Both also record a hash of every source file, so mutation knows which code the task changed.
+
 The `red` gate needs `red.json` with the tests unchanged since; the `green` gate needs `green.json`, matching both `red.json` and the current tests. To change a test after red, go back with `specpilot reopen <task> red`.
+
+In the `mutation` phase the tests have to prove they catch bugs:
+
+- **`specpilot mutate <task>`** runs [Stryker](https://stryker-mutator.io/) over the source files the task changed between `red.json` and `green.json`, plus every file mutated in an earlier round, so the set only grows after a reopen. Code and tests must be byte for byte the green version. The project needs `npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker`; SpecPilot generates the Stryker config (Jest runner, plus the TypeScript checker when the project has a `tsconfig.json`, so a mutant that does not compile is not counted as caught). The result goes to `mutation.json`. If Stryker exits with an error, nothing is recorded. Stryker's `.stryker-tmp/` and `reports/` folders are never hashed as code or tests.
+- Every mutant that is not killed (`Survived`, `NoCoverage`, `Pending`, `RuntimeError`, or `Ignored` by a `// Stryker disable` comment) is listed in `specs/<task>/equivalents.md`, with an id made of `file:line mutator mutated-code`. Only the human can accept one as equivalent, by writing `- Approved: yes` and a `- Reason:` under its id. Approvals are kept when `mutate` runs again, as long as the id still matches exactly. Any other survivor is a test gap: `specpilot reopen <task> red`.
+- **`specpilot mutate bug <task> AC-n`**: the code agent injects one targeted bug for the criterion and runs this command. The bug counts as caught only if a test with `AC-n` in its name fails on an assertion and no suite fails to run (so a bug that does not compile is not caught). Then the code agent removes the bug. A missed bug is a test gap, just like a surviving mutant: a later bug that is caught does not hide it, and the task goes back with `specpilot reopen <task> red`.
+
+The `mutation` gate passes only when Stryker ran over the current code and tests, every survivor is approved in `equivalents.md`, every acceptance criterion has a caught bug and no missed one recorded after the current `tdd green` against the same tests, and code and tests are byte for byte the green version again (a leftover bug fails the gate).
+
+Known limitation: SpecPilot's own CLI tests run the compiled `dist/cli.js`, which Stryker does not mutate, so mutants in the CLI code survive even when a CLI test covers that behaviour. Those survivors are real test gaps (they need unit tests that import `src/`) and are never approved as equivalents. Target projects whose tests import `src/` directly are not affected.
 
 ```bash
 npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
@@ -116,6 +128,8 @@ npx specpilot grill hash TASK-101                # hash the auditor records in a
 npx specpilot status                             # show each task's phase
 npx specpilot tdd red TASK-101                   # record that the new tests fail on assertions
 npx specpilot tdd green TASK-101                 # record that all tests pass, unchanged since red
+npx specpilot mutate TASK-101                    # run Stryker over the task's code
+npx specpilot mutate bug TASK-101 AC-1           # check that the tests catch a bug injected for AC-1
 npx specpilot gate TASK-101                      # close the current phase if its gate passes
 npx specpilot reopen TASK-101 red                # go back (only plan→grill, mutation→red, verify→red)
 ```
@@ -133,7 +147,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 4 | Grill-me skill, checklist and auditor subagent | ✅ Done | A spec with a planted ambiguity cannot leave the grill phase; a stale or blocked audit fails the gate |
 | 5 | Phase hooks in Claude Code | ✅ Done | Editing code before the red phase is blocked |
 | 6 | `tdd red` / `tdd green` with evidence | ✅ Done | Red must fail on an assertion; tests cannot change after green |
-| 7 | `mutate`: Stryker plus targeted bugs | ⏳ Next | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |
+| 7 | `mutate`: Stryker plus targeted bugs | 🔍 In review | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |
 | 8 | `verify` and the false "done" detector | — | A criterion with no test blocks the task and counts as a hallucination |
 | 9 | Cost and latency metrics, Standard/Max modes | — | A known transcript gives exact tokens and € |
 | 10 | `specpilot init` (zero friction) | — | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |

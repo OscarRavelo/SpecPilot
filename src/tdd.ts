@@ -26,22 +26,25 @@ export interface JestReport {
   testResults: JestSuite[];
 }
 
-// What tdd red / tdd green saw: the failing (red) or passing (green) tests and a hash of every test file.
+// What tdd red / tdd green saw: the failing (red) or passing (green) tests and a hash of every test and
+// source file. Evidence from before sourceFiles existed is still read, but specpilot mutate needs it.
 export interface Evidence {
   taskId: string;
   at: string;
   tests: string[];
   testFiles: Record<string, string>;
+  sourceFiles?: Record<string, string>;
 }
 
 export type Stage = 'red' | 'green';
 
-const SKIPPED_DIRS = ['node_modules', '.git', 'dist', 'build', 'coverage'];
+// .stryker-tmp holds Stryker's sandbox copies of the project and reports its HTML/JSON reports.
+const SKIPPED_DIRS = ['node_modules', '.git', 'dist', 'build', 'coverage', '.stryker-tmp', 'reports'];
 
 const firstLine = (text: string) => text.split('\n').find((line) => line.trim() !== '')?.trim() ?? '';
 
 // A suite that failed to run has no test results, only a message such as "Test suite failed to run".
-function brokenSuites(report: JestReport, root: string): string[] {
+export function brokenSuites(report: JestReport, root: string): string[] {
   return report.testResults
     .filter((suite) => suite.status === 'failed' && suite.assertionResults.length === 0)
     .map((suite) => {
@@ -54,7 +57,7 @@ function brokenSuites(report: JestReport, root: string): string[] {
 const allTests = (report: JestReport) => report.testResults.flatMap((suite) => suite.assertionResults);
 
 // Jest sets matcherResult only when an expect() assertion failed; a thrown error has none.
-const failsOnAssertion = (test: JestAssertion) =>
+export const failsOnAssertion = (test: JestAssertion) =>
   test.failureDetails.length > 0 &&
   test.failureDetails.every((detail) => typeof detail === 'object' && detail !== null && 'matcherResult' in detail);
 
@@ -89,15 +92,15 @@ export function greenProblems(report: JestReport, root: string): string[] {
   return [...broken, ...failed];
 }
 
-// Every test file in the project, keyed by its path relative to the root (sorted, forward slashes).
-export function testFileHashes(root: string): Record<string, string> {
+// Every test or source file in the project, keyed by its path relative to the root (sorted, forward slashes).
+export function fileHashes(root: string, kind: 'test' | 'source'): Record<string, string> {
   const files: string[] = [];
   const walk = (dir: string) => {
     for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
       const file = dir === '' ? entry.name : `${dir}/${entry.name}`;
       if (entry.isDirectory()) {
         if (!SKIPPED_DIRS.includes(entry.name)) walk(file);
-      } else if (entry.isFile() && classifyPath(file) === 'test') {
+      } else if (entry.isFile() && classifyPath(file) === kind) {
         files.push(file);
       }
     }
@@ -107,6 +110,21 @@ export function testFileHashes(root: string): Record<string, string> {
   return Object.fromEntries(
     files.map((file) => [file, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')]),
   );
+}
+
+export function testFileHashes(root: string): Record<string, string> {
+  return fileHashes(root, 'test');
+}
+
+// The source files the task changed or added between tdd red and tdd green. Evidence written
+// before sourceFiles existed gives none.
+export function taskSourceFiles(red: Evidence, green: Evidence): string[] {
+  const before = red.sourceFiles;
+  const after = green.sourceFiles;
+  if (!before || !after) return [];
+  return Object.keys(after)
+    .filter((file) => before[file] !== after[file])
+    .sort();
 }
 
 export function hashChanges(before: Record<string, string>, after: Record<string, string>): string[] {

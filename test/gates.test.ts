@@ -47,7 +47,7 @@ describe('runGate', () => {
     });
   });
 
-  test.each<Phase>(['plan', 'mutation', 'verify'])(
+  test.each<Phase>(['plan', 'verify'])(
     'the not-yet-implemented %s gate never lets the task through',
     (phase) => {
       fs.writeFileSync(path.join(dir, 'spec.md'), VALID_SPEC);
@@ -261,6 +261,276 @@ describe('runGate: red and green', () => {
     expect(runGate(taskDir(), 'red', project)).toEqual({
       ok: false,
       reasons: [`Corrupt red.json in ${taskDir()}`],
+    });
+  });
+});
+
+describe('runGate: mutation', () => {
+  const RED_CODE = 'exports.sum = () => 0;\n';
+  const GREEN_CODE = 'exports.sum = (a, b) => a + b;\n';
+  const TEST_CODE = "test('AC-1 adds', () => {});\n";
+  const SURVIVOR_ID = 'src/sum.js:1 ArithmeticOperator a - b';
+  let project: string;
+  const taskDir = () => path.join(project, 'specs', 'TASK-101');
+  const file = (name: string) => path.join(project, name);
+  const sha256 = (text: string) => crypto.createHash('sha256').update(text).digest('hex');
+  const hashesOf = (files: Record<string, string>) =>
+    Object.fromEntries(Object.entries(files).map(([name, text]) => [name, sha256(text)]));
+  const evidence = (sourceFiles: Record<string, string>) => ({
+    taskId: 'TASK-101',
+    at: '2026-10-18T10:00:00.000Z',
+    tests: ['AC-1 adds'],
+    testFiles: hashesOf({ 'test/sum.test.js': TEST_CODE }),
+    sourceFiles: hashesOf(sourceFiles),
+  });
+  const killed = { id: 'src/sum.js:1 ArithmeticOperator a * b', file: 'src/sum.js', line: 1, mutator: 'ArithmeticOperator', replacement: 'a * b', status: 'Killed' };
+  const survivor = (status = 'Survived') => ({ id: SURVIVOR_ID, file: 'src/sum.js', line: 1, mutator: 'ArithmeticOperator', replacement: 'a - b', status });
+  // A targeted bug recorded after tdd green, against the tests green.json saw.
+  const bug = (ac: string, caught: boolean, overrides: Record<string, unknown> = {}) => ({
+    ac,
+    caught,
+    at: '2026-10-18T10:05:00.000Z',
+    sourceFiles: hashesOf({ 'src/sum.js': 'exports.sum = (a, b) => a - b;\n' }),
+    testFiles: hashesOf({ 'test/sum.test.js': TEST_CODE }),
+    failing: caught ? [`${ac} adds`] : [],
+    ...overrides,
+  });
+  const writeMutation = (overrides: Record<string, unknown> = {}) =>
+    fs.writeFileSync(
+      path.join(taskDir(), 'mutation.json'),
+      JSON.stringify({
+        taskId: 'TASK-101',
+        at: '2026-10-18T10:10:00.000Z',
+        sourceFiles: hashesOf({ 'src/sum.js': GREEN_CODE }),
+        testFiles: hashesOf({ 'test/sum.test.js': TEST_CODE }),
+        mutants: [killed],
+        bugs: [bug('AC-1', true), bug('AC-2', true)],
+        ...overrides,
+      }),
+    );
+  const writeEquivalents = (text: string) => fs.writeFileSync(path.join(taskDir(), 'equivalents.md'), text);
+  const gate = () => runGate(taskDir(), 'mutation', project);
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-mutation-gate-'));
+    fs.mkdirSync(taskDir(), { recursive: true });
+    fs.mkdirSync(file('src'));
+    fs.mkdirSync(file('test'));
+    fs.writeFileSync(path.join(taskDir(), 'spec.md'), VALID_SPEC);
+    fs.writeFileSync(file('src/sum.js'), GREEN_CODE);
+    fs.writeFileSync(file('test/sum.test.js'), TEST_CODE);
+    fs.writeFileSync(path.join(taskDir(), 'red.json'), JSON.stringify(evidence({ 'src/sum.js': RED_CODE })));
+    fs.writeFileSync(path.join(taskDir(), 'green.json'), JSON.stringify(evidence({ 'src/sum.js': GREEN_CODE })));
+    writeMutation();
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  const reasons = () => gate().reasons.join('\n');
+
+  test('passes when every mutant is killed and every AC has a caught bug', () => {
+    expect(gate()).toEqual({ ok: true, reasons: [] });
+  });
+
+  test('fails without mutation.json', () => {
+    fs.rmSync(path.join(taskDir(), 'mutation.json'));
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain('mutation.json');
+    expect(reasons()).toContain('specpilot mutate TASK-101');
+  });
+
+  test('a corrupt mutation.json is reported', () => {
+    fs.writeFileSync(path.join(taskDir(), 'mutation.json'), '{nope');
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toMatch(/Corrupt mutation\.json/);
+  });
+
+  test('fails when the Stryker run was over other source code', () => {
+    writeMutation({ sourceFiles: hashesOf({ 'src/sum.js': 'exports.sum = (a, b) => b + a;\n' }) });
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain('src/sum.js');
+    expect(reasons()).toContain('specpilot mutate TASK-101');
+  });
+
+  test('fails when the Stryker run was over other tests', () => {
+    writeMutation({ testFiles: hashesOf({ 'test/sum.test.js': "test('AC-1 adds', () => { expect(1).toBe(1); });\n" }) });
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain('test/sum.test.js');
+  });
+
+  test('a bug left in the code after mutation fails the gate', () => {
+    fs.writeFileSync(file('src/sum.js'), 'exports.sum = (a, b) => a - b;\n');
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain('src/sum.js');
+  });
+
+  test('a test changed after tdd green fails the gate', () => {
+    fs.writeFileSync(file('test/sum.test.js'), "test('AC-1 adds', () => { expect(2).toBe(2); });\n");
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain('test/sum.test.js');
+  });
+
+  test('a surviving mutant fails the gate and names the mutant and the way back to red', () => {
+    writeMutation({ mutants: [killed, survivor()] });
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain(SURVIVOR_ID);
+    expect(reasons()).toContain('specpilot reopen TASK-101 red');
+    expect(reasons()).not.toContain(killed.id);
+  });
+
+  test('a mutant without coverage fails the gate too', () => {
+    writeMutation({ mutants: [survivor('NoCoverage')] });
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain(SURVIVOR_ID);
+  });
+
+  test('a survivor approved as equivalent with exactly its id passes', () => {
+    writeMutation({ mutants: [killed, survivor()] });
+    writeEquivalents(`# Equivalent mutants: TASK-101\n\n### ${SURVIVOR_ID}\n- Approved: yes\n- Reason: same result for these inputs\n`);
+    expect(gate()).toEqual({ ok: true, reasons: [] });
+  });
+
+  test('a survivor listed but not approved fails the gate', () => {
+    writeMutation({ mutants: [survivor()] });
+    writeEquivalents(`### ${SURVIVOR_ID}\n- Approved: no\n- Reason: \n`);
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain(SURVIVOR_ID);
+  });
+
+  test('an approval for a near-identical id does not count', () => {
+    writeMutation({ mutants: [survivor()] });
+    writeEquivalents('### src/sum.js:2 ArithmeticOperator a - b\n- Approved: yes\n- Reason: other line\n');
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain(SURVIVOR_ID);
+  });
+
+  test('an AC without a targeted bug fails the gate and names the AC', () => {
+    writeMutation({ bugs: [bug('AC-1', true)] });
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain('AC-2');
+    expect(gate().reasons.some((reason) => /AC-1\b/.test(reason))).toBe(false);
+  });
+
+  test('an AC whose targeted bug was not caught fails the gate', () => {
+    writeMutation({ bugs: [bug('AC-1', false), bug('AC-2', true)] });
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain('AC-1');
+  });
+
+  // A missed targeted bug is a test gap: a later caught one does not undo it.
+  const expectMissedBugGap = (ac: string) => {
+    expect(gate().ok).toBe(false);
+    const reason = gate().reasons.find((text) => new RegExp(`\\b${ac}\\b`).test(text));
+    expect(reason).toBeDefined();
+    expect(reason).toMatch(/test gap/);
+    expect(reason).toContain('specpilot reopen TASK-101 red');
+  };
+
+  test('an AC with a missed bug fails the gate even if a caught one was recorded later', () => {
+    writeMutation({ bugs: [bug('AC-1', false), bug('AC-1', true), bug('AC-2', true)] });
+    expectMissedBugGap('AC-1');
+    expect(gate().reasons.some((text) => /\bAC-2\b/.test(text))).toBe(false);
+  });
+
+  test('a stale missed bug does not count, but a current missed one does', () => {
+    const oldTests = hashesOf({ 'test/sum.test.js': "test('AC-1 adds', () => { expect(1).toBe(1); });\n" });
+    writeMutation({
+      bugs: [
+        bug('AC-1', false, { at: '2026-10-18T09:59:00.000Z' }),
+        bug('AC-1', false, { testFiles: oldTests }),
+        bug('AC-1', true),
+        bug('AC-2', true),
+      ],
+    });
+    expect(gate()).toEqual({ ok: true, reasons: [] });
+
+    writeMutation({
+      bugs: [bug('AC-1', false, { at: '2026-10-18T09:59:00.000Z' }), bug('AC-1', false, { at: '2026-10-18T10:01:00.000Z' }), bug('AC-1', true), bug('AC-2', true)],
+    });
+    expectMissedBugGap('AC-1');
+  });
+
+  test('fails when mutation.json belongs to another task', () => {
+    writeMutation({ taskId: 'TASK-999' });
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain('mutation.json');
+    expect(reasons()).toContain('TASK-999');
+  });
+
+  test('fails without green.json', () => {
+    fs.rmSync(path.join(taskDir(), 'green.json'));
+    expect(gate()).toEqual({ ok: false, reasons: ['Missing green.json: run specpilot tdd green TASK-101'] });
+  });
+
+  test('fails when green.json has no source hashes and asks to rerun tdd red and tdd green', () => {
+    const { sourceFiles, ...old } = evidence({ 'src/sum.js': GREEN_CODE });
+    fs.writeFileSync(path.join(taskDir(), 'green.json'), JSON.stringify(old));
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain('green.json has no source file hashes');
+    expect(reasons()).toContain('specpilot tdd green TASK-101');
+  });
+
+  test('a mutation.json written only by mutate bug means Stryker has not run yet', () => {
+    writeMutation({ sourceFiles: {}, testFiles: {}, mutants: [] });
+    expect(gate().ok).toBe(false);
+    expect(gate().reasons).toContain('Stryker has not run yet: run specpilot mutate TASK-101');
+  });
+
+  test('a bug left in the code says to remove the injected bug', () => {
+    fs.writeFileSync(file('src/sum.js'), 'exports.sum = (a, b) => a - b;\n');
+    expect(gate().reasons).toEqual(['Source code differs from tdd green (changed src/sum.js): remove the injected bug']);
+  });
+
+  test.each(['Pending', 'RuntimeError', 'Ignored'])('a %s mutant fails the gate like a survivor', (status) => {
+    writeMutation({ mutants: [killed, survivor(status)] });
+    expect(gate().ok).toBe(false);
+    expect(reasons()).toContain(`Surviving mutant ${SURVIVOR_ID} (${status})`);
+    expect(reasons()).toContain('specpilot reopen TASK-101 red');
+  });
+
+  test.each(['Pending', 'RuntimeError', 'Ignored'])('a %s mutant passes only with a human approval', (status) => {
+    writeMutation({ mutants: [killed, survivor(status)] });
+    writeEquivalents(`### ${SURVIVOR_ID}\n- Approved: yes\n- Reason: checked by the human\n`);
+    expect(gate()).toEqual({ ok: true, reasons: [] });
+  });
+
+  // A targeted bug counts only for the current green: the tests it ran against are green.json's,
+  // and it was recorded after tdd green.
+  describe('a caught bug from an earlier round does not count', () => {
+    const noCaughtBug = (ac: string) => {
+      expect(gate().ok).toBe(false);
+      const reason = gate().reasons.find((text) => new RegExp(`\\b${ac}\\b`).test(text));
+      expect(reason).toBeDefined();
+      expect(reason).toContain(`specpilot mutate bug TASK-101 ${ac}`);
+    };
+
+    test('a bug recorded against other tests', () => {
+      const oldTests = hashesOf({ 'test/sum.test.js': "test('AC-1 adds', () => { expect(1).toBe(1); });\n" });
+      writeMutation({ bugs: [bug('AC-1', true, { testFiles: oldTests }), bug('AC-2', true)] });
+      noCaughtBug('AC-1');
+    });
+
+    test('a bug recorded before tdd green', () => {
+      writeMutation({ bugs: [bug('AC-1', true, { at: '2026-10-18T09:59:00.000Z' }), bug('AC-2', true)] });
+      noCaughtBug('AC-1');
+    });
+
+    test('a bug recorded at the same moment as tdd green', () => {
+      writeMutation({ bugs: [bug('AC-1', true), bug('AC-2', true, { at: '2026-10-18T10:00:00.000Z' })] });
+      noCaughtBug('AC-2');
+    });
+
+    test('a bug without test hashes (recorded before they were stored)', () => {
+      const { testFiles, ...old } = bug('AC-1', true);
+      writeMutation({ bugs: [old, bug('AC-2', true)] });
+      noCaughtBug('AC-1');
+    });
+
+    test('next to stale bugs, only an AC with a current caught bug passes', () => {
+      writeMutation({
+        bugs: [bug('AC-1', true, { at: '2026-10-18T09:00:00.000Z' }), bug('AC-2', true, { at: '2026-10-18T09:00:00.000Z' }), bug('AC-2', true)],
+      });
+      noCaughtBug('AC-1');
+      expect(gate().reasons.some((text) => /\bAC-2\b/.test(text))).toBe(false);
     });
   });
 });

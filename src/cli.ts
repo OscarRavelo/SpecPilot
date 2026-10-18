@@ -9,8 +9,34 @@ import { parseLedger, checkLedger } from './ledger';
 import { checklistFor } from './checklist';
 import { ledgerHash } from './audit';
 import { checkToolUse, stopWarning } from './hooks';
-import { failingTests, greenProblems, hashChanges, passingTests, readEvidence, redProblems, runTests, testFileHashes, writeEvidence } from './tdd';
+import {
+  failingTests,
+  fileHashes,
+  greenProblems,
+  hashChanges,
+  passingTests,
+  readEvidence,
+  redProblems,
+  runTests,
+  taskSourceFiles,
+  testFileHashes,
+  writeEvidence,
+} from './tdd';
+import {
+  bugProblems,
+  missingSourceHashes,
+  parseEquivalents,
+  parseStrykerReport,
+  readMutationEvidence,
+  renderEquivalents,
+  runStryker,
+  survivors,
+  unapprovedSurvivors,
+  writeMutationEvidence,
+} from './mutation';
+import type { MutationEvidence } from './mutation';
 import type { ToolUse } from './hooks';
+import type { Evidence } from './tdd';
 
 const SPECS_DIR = 'specs';
 
@@ -29,12 +55,13 @@ Commands:
   gate <task>             Check the current phase and, if it passes, move to the next one
   reopen <task> <phase>   Go back to an allowed earlier phase
   tdd red|green <task>    Run the tests and record red / green evidence
-  mutate                  Inject bugs and check that the tests fail
+  mutate <task>           Run Stryker over the task's code and record the surviving mutants
+  mutate bug <task> AC-n  Run the tests against a bug injected for one AC and record whether it was caught
   verify                  Verify the task against its spec
   report                  Summarize cost and quality metrics
 `;
 
-const NOT_IMPLEMENTED = ['init', 'mutate', 'verify', 'report'];
+const NOT_IMPLEMENTED = ['init', 'verify', 'report'];
 
 function specLint(file: string | undefined): number {
   if (!file) {
@@ -285,7 +312,8 @@ function tdd(stage: string | undefined, taskId: string | undefined): number {
   }
 
   const tests = stage === 'red' ? failingTests(report) : passingTests(report);
-  writeEvidence(taskDir, stage, { taskId, at: new Date().toISOString(), tests, testFiles });
+  const sourceFiles = fileHashes(root, 'source');
+  writeEvidence(taskDir, stage, { taskId, at: new Date().toISOString(), tests, testFiles, sourceFiles });
   if (stage === 'red') {
     console.log(`RED: ${taskId} (${plural(tests.length, 'failing test')}, all on assertions)`);
     for (const name of tests) console.log(`  ✕ ${name}`);
@@ -293,6 +321,165 @@ function tdd(stage: string | undefined, taskId: string | undefined): number {
     console.log(`GREEN: ${taskId} (${tests.length} ${tests.length === 1 ? 'test passes' : 'tests pass'}, tests unchanged since red)`);
   }
   console.log(`Next: specpilot gate ${taskId}`);
+  return 0;
+}
+
+// Mutation: Stryker over the task's code (specpilot mutate <task>) and targeted bugs (specpilot mutate bug <task> AC-n).
+function mutate(args: string[]): number {
+  const bug = args[0] === 'bug';
+  const [taskId, acId] = bug ? args.slice(1) : args;
+  if (!taskId || (bug && !acId)) {
+    console.error('Usage: specpilot mutate <task> | specpilot mutate bug <task> AC-n');
+    return 1;
+  }
+  const command = bug ? 'specpilot mutate bug' : 'specpilot mutate';
+  const task = openMutationTask(taskId, command);
+  if (!task) return 1;
+  return bug ? mutateBug(task, acId) : mutateRun(task);
+}
+
+interface MutationTask {
+  taskId: string;
+  taskDir: string;
+  red: Evidence | null;
+  green: Evidence & { sourceFiles: Record<string, string> };
+  root: string;
+  sourceFiles: Record<string, string>;
+  testFiles: Record<string, string>;
+}
+
+// Both mutate commands run only in mutation, over the tests tdd green saw.
+function openMutationTask(taskId: string, command: string): MutationTask | null {
+  const task = openTask(taskId);
+  if (!task) return null;
+
+  const { taskDir, state } = task;
+  if (state.phase !== 'mutation') {
+    console.error(`${taskId} is in ${state.phase}: ${command} runs only in the mutation phase`);
+    return null;
+  }
+  const green = readEvidence(taskDir, 'green');
+  if (!green) {
+    console.error(`Missing green.json: run specpilot tdd green ${taskId} first`);
+    return null;
+  }
+  if (!green.sourceFiles) {
+    console.error(missingSourceHashes(taskId, 'green'));
+    return null;
+  }
+  const root = process.cwd();
+  const testFiles = fileHashes(root, 'test');
+  const changes = hashChanges(green.testFiles, testFiles);
+  if (changes.length > 0) {
+    console.error(`Tests changed after tdd green (${changes.join(', ')}): go back with specpilot reopen ${taskId} red`);
+    return null;
+  }
+  return {
+    taskId,
+    taskDir,
+    red: readEvidence(taskDir, 'red'),
+    green: green as MutationTask['green'],
+    root,
+    sourceFiles: fileHashes(root, 'source'),
+    testFiles,
+  };
+}
+
+const emptyMutation = (taskId: string): MutationEvidence => ({
+  taskId,
+  at: new Date().toISOString(),
+  sourceFiles: {},
+  testFiles: {},
+  mutants: [],
+  bugs: [],
+});
+
+function mutateRun({ taskId, taskDir, red, green, root, sourceFiles, testFiles }: MutationTask): number {
+  const changes = hashChanges(green.sourceFiles, sourceFiles);
+  if (changes.length > 0) {
+    console.error(
+      `Source code differs from tdd green (${changes.join(', ')}): Stryker must run over the code tdd green saw, so remove any injected bug first`,
+    );
+    return 1;
+  }
+  if (!red) {
+    console.error(`Missing red.json: run specpilot tdd red ${taskId} first`);
+    return 1;
+  }
+  if (!red.sourceFiles) {
+    console.error(missingSourceHashes(taskId, 'red'));
+    return 1;
+  }
+  // After a reopen, red and green differ only in the code of that round, so the files mutated before
+  // (and those of their mutants, for a mutation.json without a files list) are mutated again.
+  const previous = readMutationEvidence(taskDir) ?? emptyMutation(taskId);
+  const files = [
+    ...new Set([
+      ...taskSourceFiles(red, green),
+      ...(previous.files ?? []),
+      ...previous.mutants.map((m) => m.file),
+    ]),
+  ]
+    .filter((name) => name in sourceFiles)
+    .sort();
+  if (files.length === 0) {
+    console.error(`${taskId} has no task code to mutate: no source file changed between tdd red and tdd green`);
+    return 1;
+  }
+
+  const mutants = parseStrykerReport(runStryker(root, files), root);
+  writeMutationEvidence(taskDir, { ...previous, at: new Date().toISOString(), sourceFiles, testFiles, files, mutants });
+
+  const equivalentsFile = path.join(taskDir, 'equivalents.md');
+  const approvals = fs.existsSync(equivalentsFile) ? parseEquivalents(fs.readFileSync(equivalentsFile, 'utf8')) : [];
+  fs.writeFileSync(equivalentsFile, renderEquivalents(taskId, survivors(mutants), approvals));
+
+  const count = (...statuses: string[]) => mutants.filter((m) => statuses.includes(m.status)).length;
+  console.log(
+    `MUTATION: ${taskId} (${plural(files.length, 'file')}: ${count('Killed', 'Timeout')} killed, ` +
+      `${survivors(mutants).length} survived, ${plural(count('CompileError'), 'compile error')})`,
+  );
+  const gaps = unapprovedSurvivors(mutants, parseEquivalents(fs.readFileSync(equivalentsFile, 'utf8')));
+  if (gaps.length > 0) {
+    console.error(`${plural(gaps.length, 'surviving mutant')}, each one a test gap:`);
+    for (const mutant of gaps) console.error(`  ✕ ${mutant.id} (${mutant.status})`);
+    console.error(`Stop and report the gap, then go back with specpilot reopen ${taskId} red`);
+    console.error(`(only the human may approve a mutant as equivalent, in ${equivalentsFile})`);
+    return 1;
+  }
+  console.log(`Next: inject a bug for each AC and run specpilot mutate bug ${taskId} AC-n, then specpilot gate ${taskId}`);
+  return 0;
+}
+
+// A targeted bug: code-agent breaks the code for one AC, and a test named with that AC must fail on an assertion.
+function mutateBug({ taskId, taskDir, green, root, sourceFiles, testFiles }: MutationTask, acId: string): number {
+  const { acceptanceCriteria } = parseSpec(fs.readFileSync(path.join(taskDir, 'spec.md'), 'utf8'));
+  if (!acceptanceCriteria.some((ac) => ac.id === acId)) {
+    const known = acceptanceCriteria.map((ac) => ac.id).join(', ');
+    console.error(`${acId} is not an acceptance criterion of ${taskId} (it has ${known || 'none'})`);
+    return 1;
+  }
+  if (hashChanges(green.sourceFiles, sourceFiles).length === 0) {
+    console.error(`No bug injected: the source code is identical to tdd green. Inject a bug for ${acId} first`);
+    return 1;
+  }
+
+  const report = runTests(root);
+  const problems = bugProblems(report, acId, root);
+  const failing = failingTests(report);
+  const previous = readMutationEvidence(taskDir) ?? emptyMutation(taskId);
+  const record = { ac: acId, caught: problems.length === 0, at: new Date().toISOString(), sourceFiles, testFiles, failing };
+  writeMutationEvidence(taskDir, { ...previous, bugs: [...previous.bugs, record] });
+
+  if (problems.length > 0) {
+    console.error(`NOT CAUGHT: the bug for ${acId} in ${taskId} is a test gap:`);
+    for (const problem of problems) console.error(`  - ${problem}`);
+    console.error(`Remove the bug, stop and report the gap, then go back with specpilot reopen ${taskId} red`);
+    return 1;
+  }
+  console.log(`CAUGHT: the bug for ${acId} in ${taskId} (${plural(failing.length, 'failing test')})`);
+  for (const name of failing) console.log(`  ✕ ${name}`);
+  console.log(`Now remove the bug: the code must be exactly what tdd green saw before specpilot gate ${taskId}`);
   return 0;
 }
 
@@ -314,6 +501,7 @@ function main([command, ...args]: string[]): number {
   if (command === 'status') return status();
   if (command === 'gate') return gate(args[0]);
   if (command === 'reopen') return reopen(args[0], args[1]);
+  if (command === 'mutate') return mutate(args);
   if (NOT_IMPLEMENTED.includes(command)) {
     console.error(`"${command}" is not implemented yet`);
     return 1;
