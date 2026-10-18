@@ -6,19 +6,18 @@ It is a TypeScript CLI: sources in `src/`, compiled to `dist/`, tests in `test/*
 ## The loop (human in the loop)
 
 1. The human approves the plan.
-2. The tests agent writes tests from the spec (red).
-3. The code agent writes code until the tests pass (green), then hands back to the tests agent.
-4. The tests agent reruns the tests and reviews the result.
+2. `code-agent` creates compiling stubs; `tests-agent` writes tests from the spec that fail on assertions (red).
+3. `code-agent` writes code until the tests pass (green), then hands back to `tests-agent`.
+4. `tests-agent` reruns the tests and reviews the result.
 5. The human approves the final merge.
 
 ## Hard rules
 
-- The code agent never edits tests.
-- The tests agent never edits source code.
 - Nobody marks a task done without running `npm test` and showing the output.
 - No task is done until the mutation phase (Stryker) has run.
-- Tests and code are always written by two different agents, a tests agent and a code agent, including while building SpecPilot itself. The orchestrating session writes neither.
-- A surviving mutant in the mutation phase is a test gap, and nobody adds tests in mutation. The agent stops, reports the gap and runs `specpilot reopen <task> red`. Then the tests agent writes the missing test (it must fail first: `specpilot tdd red <task>`), the code agent goes back to green (`specpilot tdd green <task>`), and mutation runs again.
+- SpecPilot itself is built with two subagents in `.claude/agents/`: `tests-agent` may only edit `test/`, `code-agent` may only edit `src/`.
+- The main session only coordinates: it calls the agents, runs `npm test` and reports to the human. It never edits `test/` or `src/` directly.
+- A surviving mutant in the mutation phase is a test gap, and nobody adds tests in mutation. The agent stops, reports the gap and runs `specpilot reopen <task> red`. Then `tests-agent` writes the missing test (it must fail first: `specpilot tdd red <task>`), `code-agent` goes back to green (`specpilot tdd green <task>`), and mutation runs again.
 
 ## Phases
 

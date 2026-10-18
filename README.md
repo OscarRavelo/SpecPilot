@@ -139,7 +139,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 
 ## Development
 
-SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
+SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. It is built with two Claude Code subagents in [`.claude/agents/`](.claude/agents/): `tests-agent` writes the tests and may only edit `test/`, `code-agent` writes the code and may only edit `src/`, and the main session only coordinates. Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
 
 ```bash
 npm install
