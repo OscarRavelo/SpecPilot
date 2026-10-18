@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { bashTargets, classifyPath, checkToolUse } from '../src/hooks';
+import { bashTargets, classifyPath, checkToolUse, stopWarning } from '../src/hooks';
 import type { ToolUse } from '../src/hooks';
 import { PHASES } from '../src/state';
 
@@ -327,5 +327,61 @@ describe('checkToolUse', () => {
     expect(decision.allow).toBe(false);
     expect(decision.reason).toContain('Corrupt state.json');
     expect(checkToolUse(edit('README.md'), root).allow).toBe(true);
+  });
+});
+
+describe('stopWarning', () => {
+  let root: string;
+  const writeTask = (taskId: string, phase: string) => {
+    fs.mkdirSync(path.join(root, 'specs', taskId), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'specs', taskId, 'state.json'),
+      JSON.stringify({ taskId, phase, history: [] }),
+    );
+  };
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-stop-'));
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  test('without tasks there is nothing to say', () => {
+    expect(stopWarning(root)).toBeNull();
+  });
+
+  test.each(['research', 'grill', 'plan', 'red', 'green', 'done'])('a task in %s gets no warning', (phase) => {
+    writeTask('TASK-101', phase);
+    expect(stopWarning(root)).toBeNull();
+  });
+
+  test.each(['mutation', 'verify'])('a task in %s is reported as not done', (phase) => {
+    writeTask('TASK-101', phase);
+    expect(stopWarning(root)).toBe(
+      `TASK-101 is in ${phase}: the mutation phase cannot be completed yet (specpilot mutate is not implemented), so the task is not done.`,
+    );
+  });
+
+  test('every waiting task is listed', () => {
+    writeTask('TASK-101', 'mutation');
+    writeTask('TASK-102', 'green');
+    writeTask('TASK-103', 'verify');
+    const warning = stopWarning(root) as string;
+    expect(warning).toContain('TASK-101 is in mutation');
+    expect(warning).toContain('TASK-103 is in verify');
+    expect(warning).not.toContain('TASK-102');
+  });
+
+  test('SPECPILOT_TASK chooses the task', () => {
+    writeTask('TASK-101', 'mutation');
+    writeTask('TASK-102', 'green');
+    expect(stopWarning(root, 'TASK-102')).toBeNull();
+    expect(stopWarning(root, 'TASK-101')).toContain('TASK-101 is in mutation');
+  });
+
+  test('state that cannot be read is reported, not hidden', () => {
+    writeTask('TASK-101', 'mutation');
+    fs.writeFileSync(path.join(root, 'specs', 'TASK-101', 'state.json'), '{nope');
+    expect(stopWarning(root)).toContain('Corrupt state.json');
+    expect(stopWarning(root, 'TASK-404')).toContain('SPECPILOT_TASK=TASK-404');
   });
 });

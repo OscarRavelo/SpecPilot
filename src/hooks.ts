@@ -273,6 +273,25 @@ function checkFile(target: string, root: string, agentType: string | undefined, 
   return allow();
 }
 
+// Until specpilot mutate exists, a task that reached mutation cannot finish. Blocking the stop would
+// leave the agent looping with nothing it can do, so the Stop hook only says the task is not done.
+export function stopWarning(root: string, taskId?: string): string | null {
+  let tasks: { taskId: string; phase: Phase }[];
+  try {
+    tasks = watchedTasks(root, taskId);
+  } catch (err) {
+    return (err as Error).message;
+  }
+  const waiting = tasks.filter((task) => task.phase === 'mutation' || task.phase === 'verify');
+  if (waiting.length === 0) return null;
+  return waiting
+    .map(
+      (task) =>
+        `${task.taskId} is in ${task.phase}: the mutation phase cannot be completed yet (specpilot mutate is not implemented), so the task is not done.`,
+    )
+    .join(' ');
+}
+
 export function checkToolUse(input: ToolUse, root: string, taskId?: string): HookDecision {
   let targets: string[];
   if (input.tool_name === 'Bash') {

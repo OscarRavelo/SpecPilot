@@ -17,7 +17,7 @@ describe('specpilot CLI', () => {
     const result = run('--help');
 
     expect(result.status).toBe(0);
-    for (const command of ['init', 'spec lint', 'ledger check', 'grill checklist', 'grill hash', 'hook pre-tool-use', 'gate', 'reopen', 'tdd', 'mutate', 'verify', 'report', 'status']) {
+    for (const command of ['init', 'spec lint', 'ledger check', 'grill checklist', 'grill hash', 'hook pre-tool-use', 'hook stop', 'gate', 'reopen', 'tdd', 'mutate', 'verify', 'report', 'status']) {
       expect(result.stdout).toContain(command);
     }
   });
@@ -388,5 +388,64 @@ describe('specpilot hook pre-tool-use', () => {
     const result = spawnSync(process.execPath, [BIN, 'hook', 'post-tool-use'], { encoding: 'utf8', cwd: project, input: '{}' });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Usage: specpilot hook pre-tool-use');
+  });
+});
+
+describe('specpilot hook stop', () => {
+  let project: string;
+
+  // A Stop hook that exits 2 forces the agent to keep going; this one only warns, so it always exits 0.
+  const stop = (input = '{"hook_event_name":"Stop"}', env: Record<string, string> = {}) => {
+    const { SPECPILOT_TASK, CLAUDE_PROJECT_DIR, ...rest } = process.env;
+    return spawnSync(process.execPath, [BIN, 'hook', 'stop'], {
+      encoding: 'utf8',
+      cwd: project,
+      input,
+      env: { ...rest, ...env },
+    });
+  };
+  const writeTask = (taskId: string, phase: string) => {
+    fs.mkdirSync(path.join(project, 'specs', taskId), { recursive: true });
+    fs.writeFileSync(
+      path.join(project, 'specs', taskId, 'state.json'),
+      JSON.stringify({ taskId, phase, history: [] }),
+    );
+  };
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-stop-cli-'));
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  test('a task waiting for mutation is shown as a system message, without blocking', () => {
+    writeTask('TASK-101', 'mutation');
+    const result = stop();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({ systemMessage: expect.stringContaining('TASK-101 is in mutation') });
+  });
+
+  test('nothing to report prints nothing', () => {
+    writeTask('TASK-101', 'green');
+    const result = stop();
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
+  });
+
+  test('SPECPILOT_TASK chooses the task', () => {
+    writeTask('TASK-101', 'mutation');
+    writeTask('TASK-102', 'green');
+    expect(stop(undefined, { SPECPILOT_TASK: 'TASK-102' }).stdout).toBe('');
+    expect(stop().stdout).toContain('TASK-101 is in mutation');
+  });
+
+  test('a corrupt state.json or bad input still exits 0', () => {
+    writeTask('TASK-101', 'mutation');
+    fs.writeFileSync(path.join(project, 'specs', 'TASK-101', 'state.json'), '{nope');
+    for (const input of ['{nope', '']) {
+      const result = stop(input);
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout).systemMessage).toContain('Corrupt state.json');
+    }
   });
 });

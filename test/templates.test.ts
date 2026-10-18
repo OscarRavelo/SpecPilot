@@ -99,9 +99,15 @@ describe('settings.json', () => {
     expect(group!.hooks.every((h) => h.type === 'command')).toBe(true);
   });
 
+  test('warns when the agent stops', () => {
+    const stop: { matcher?: string; hooks: { type: string; command: string }[] }[] = settings.hooks.Stop;
+    expect(stop).toEqual([{ hooks: [{ type: 'command', command: 'npx specpilot hook stop' }] }]);
+  });
+
   test('only runs specpilot commands that exist', () => {
-    const commands = groups.flatMap((g) => g.hooks.flatMap((h) => specpilotCommands(h.command)));
-    expect(commands).toEqual(['hook pre-tool-use']);
+    const all: { hooks: { command: string }[] }[] = Object.values(settings.hooks).flat() as never;
+    const commands = all.flatMap((g) => g.hooks.flatMap((h) => specpilotCommands(h.command)));
+    expect(commands.sort()).toEqual(['hook pre-tool-use', 'hook stop']);
     for (const command of commands) expect(isKnown(command)).toBe(true);
   });
 });
