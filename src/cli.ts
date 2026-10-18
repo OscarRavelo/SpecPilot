@@ -8,6 +8,8 @@ import { runGate } from './gates';
 import { parseLedger, checkLedger } from './ledger';
 import { checklistFor } from './checklist';
 import { ledgerHash } from './audit';
+import { checkToolUse } from './hooks';
+import type { ToolUse } from './hooks';
 
 const SPECS_DIR = 'specs';
 
@@ -19,6 +21,7 @@ Commands:
   ledger check <task>     Check that every fact in the grill ledger cites a real source
   grill checklist <task>  Show which checklist items the grill ledger covers
   grill hash <task>       Print the hash the grill auditor records in audit.md
+  hook pre-tool-use       Claude Code hook: block edits the current phase does not allow
   status                  Show each task's phase
   gate <task>             Check the current phase and, if it passes, move to the next one
   reopen <task> <phase>   Go back to an allowed earlier phase
@@ -198,6 +201,32 @@ function reopen(taskId: string | undefined, phase: string | undefined): number {
   return 0;
 }
 
+// Exit 2 tells Claude Code to block the tool call and show stderr to the agent.
+function hook(event: string | undefined): number {
+  if (event !== 'pre-tool-use') {
+    console.error('Usage: specpilot hook pre-tool-use');
+    return 1;
+  }
+
+  let input: ToolUse;
+  try {
+    input = JSON.parse(fs.readFileSync(0, 'utf8'));
+  } catch {
+    console.error('Blocked by SpecPilot: Invalid hook input (expected the PreToolUse JSON on stdin)');
+    return 2;
+  }
+  if (!input || typeof input.tool_name !== 'string' || typeof input.tool_input !== 'object' || !input.tool_input) {
+    console.error('Blocked by SpecPilot: Invalid hook input (expected the PreToolUse JSON on stdin)');
+    return 2;
+  }
+
+  const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const decision = checkToolUse(input, root, process.env.SPECPILOT_TASK || undefined);
+  if (decision.allow) return 0;
+  console.error(decision.reason);
+  return 2;
+}
+
 function main([command, ...args]: string[]): number {
   if (command === '--help' || command === '-h') {
     console.log(HELP);
@@ -211,6 +240,7 @@ function main([command, ...args]: string[]): number {
   if (command === 'ledger' && args[0] === 'check') return ledgerCheck(args[1]);
   if (command === 'grill' && args[0] === 'checklist') return grillChecklist(args[1]);
   if (command === 'grill' && args[0] === 'hash') return grillHash(args[1]);
+  if (command === 'hook') return hook(args[0]);
   if (command === 'status') return status();
   if (command === 'gate') return gate(args[0]);
   if (command === 'reopen') return reopen(args[0], args[1]);

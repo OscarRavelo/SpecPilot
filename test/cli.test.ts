@@ -17,7 +17,7 @@ describe('specpilot CLI', () => {
     const result = run('--help');
 
     expect(result.status).toBe(0);
-    for (const command of ['init', 'spec lint', 'ledger check', 'grill checklist', 'grill hash', 'gate', 'reopen', 'tdd', 'mutate', 'verify', 'report', 'status']) {
+    for (const command of ['init', 'spec lint', 'ledger check', 'grill checklist', 'grill hash', 'hook pre-tool-use', 'gate', 'reopen', 'tdd', 'mutate', 'verify', 'report', 'status']) {
       expect(result.stdout).toContain(command);
     }
   });
@@ -299,5 +299,86 @@ describe('specpilot grill', () => {
     const result = runIn(project, 'grill', 'hash', 'TASK-404');
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('No task TASK-404');
+  });
+});
+
+describe('specpilot hook pre-tool-use', () => {
+  let project: string;
+
+  // Claude Code passes the tool call as JSON on stdin; exit 2 blocks it and stderr is shown to the agent.
+  const hook = (input: string, env: Record<string, string> = {}) => {
+    const { SPECPILOT_TASK, CLAUDE_PROJECT_DIR, ...rest } = process.env;
+    return spawnSync(process.execPath, [BIN, 'hook', 'pre-tool-use'], {
+      encoding: 'utf8',
+      cwd: project,
+      input,
+      env: { ...rest, ...env },
+    });
+  };
+  const write = (file: string) =>
+    JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: path.join(project, file) } });
+  const writeTask = (taskId: string, phase: string) => {
+    fs.mkdirSync(path.join(project, 'specs', taskId), { recursive: true });
+    fs.writeFileSync(
+      path.join(project, 'specs', taskId, 'state.json'),
+      JSON.stringify({ taskId, phase, history: [] }),
+    );
+  };
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-hook-'));
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  test('an allowed edit exits 0 with no output', () => {
+    writeTask('TASK-101', 'green');
+    const result = hook(write('src/users.ts'));
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('');
+  });
+
+  test('a blocked edit exits 2 and explains why on stderr', () => {
+    writeTask('TASK-101', 'plan');
+    const result = hook(write('src/users.ts'));
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('TASK-101 is in plan');
+  });
+
+  test('SPECPILOT_TASK chooses the task', () => {
+    writeTask('TASK-101', 'red');
+    writeTask('TASK-102', 'green');
+    expect(hook(write('src/users.ts')).status).toBe(2);
+    expect(hook(write('src/users.ts'), { SPECPILOT_TASK: 'TASK-102' }).status).toBe(0);
+  });
+
+  test('CLAUDE_PROJECT_DIR sets the project root', () => {
+    writeTask('TASK-101', 'plan');
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-hook-cwd-'));
+    try {
+      const result = spawnSync(process.execPath, [BIN, 'hook', 'pre-tool-use'], {
+        encoding: 'utf8',
+        cwd: elsewhere,
+        input: write('src/users.ts'),
+        env: { ...process.env, CLAUDE_PROJECT_DIR: project, SPECPILOT_TASK: '' },
+      });
+      expect(result.status).toBe(2);
+    } finally {
+      fs.rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  test('input that is not a tool call blocks instead of letting it through', () => {
+    for (const input of ['{nope', '', '{}']) {
+      const result = hook(input);
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('Invalid hook input');
+    }
+  });
+
+  test('an unknown hook event exits 1 with usage', () => {
+    const result = spawnSync(process.execPath, [BIN, 'hook', 'post-tool-use'], { encoding: 'utf8', cwd: project, input: '{}' });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Usage: specpilot hook pre-tool-use');
   });
 });

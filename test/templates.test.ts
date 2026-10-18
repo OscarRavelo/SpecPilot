@@ -5,6 +5,7 @@ import { spawnSync } from 'child_process';
 const CLAUDE = path.join(__dirname, '..', 'templates', '.claude');
 const SKILL = path.join(CLAUDE, 'skills', 'sp-grill', 'SKILL.md');
 const AUDITOR = path.join(CLAUDE, 'agents', 'grill-auditor.md');
+const SETTINGS = path.join(CLAUDE, 'settings.json');
 const HELP = spawnSync(process.execPath, [path.join(__dirname, '..', 'dist', 'cli.js'), '--help'], {
   encoding: 'utf8',
 }).stdout;
@@ -20,12 +21,12 @@ function frontmatter(text: string): Record<string, string> {
   );
 }
 
-// Commands listed by --help, e.g. "gate", "ledger check", "tdd red|green".
-const KNOWN = new Set([...HELP.matchAll(/^  ([a-z]+(?: [a-z|]+)?)/gm)].map((m) => m[1]));
+// Commands listed by --help, e.g. "gate", "ledger check", "tdd red|green", "hook pre-tool-use".
+const KNOWN = new Set([...HELP.matchAll(/^  ([a-z]+(?: [a-z|-]+)?)/gm)].map((m) => m[1]));
 
 // The prompts must not tell the agent to run commands that do not exist.
 function specpilotCommands(text: string): string[] {
-  return [...text.matchAll(/specpilot ([a-z]+(?: [a-z]+)?)/g)].map((m) => m[1]);
+  return [...text.matchAll(/specpilot ([a-z]+(?: [a-z-]+)?)/g)].map((m) => m[1]);
 }
 
 function isKnown(mention: string): boolean {
@@ -55,7 +56,7 @@ describe.each([
 
 test('the known command list is read from --help', () => {
   expect(KNOWN).toEqual(expect.objectContaining({ size: expect.any(Number) }));
-  expect([...KNOWN]).toEqual(expect.arrayContaining(['gate', 'spec lint', 'ledger check']));
+  expect([...KNOWN]).toEqual(expect.arrayContaining(['gate', 'spec lint', 'ledger check', 'hook pre-tool-use']));
   expect(KNOWN.has('ledger')).toBe(false);
 });
 
@@ -84,5 +85,23 @@ describe('grill-auditor agent', () => {
 
   test.each(['npx specpilot grill hash', 'Ledger hash:', '## Blockers', '- none'])('explains %s', (phrase) => {
     expect(text).toContain(phrase);
+  });
+});
+
+describe('settings.json', () => {
+  const settings = JSON.parse(fs.readFileSync(SETTINGS, 'utf8'));
+  const groups: { matcher: string; hooks: { type: string; command: string }[] }[] = settings.hooks.PreToolUse;
+
+  test('runs the phase hook before every tool that edits files', () => {
+    const group = groups.find((g) => g.hooks.some((h) => h.command === 'npx specpilot hook pre-tool-use'));
+    expect(group).toBeDefined();
+    expect(group!.matcher.split('|').sort()).toEqual(['Edit', 'MultiEdit', 'NotebookEdit', 'Write']);
+    expect(group!.hooks.every((h) => h.type === 'command')).toBe(true);
+  });
+
+  test('only runs specpilot commands that exist', () => {
+    const commands = groups.flatMap((g) => g.hooks.flatMap((h) => specpilotCommands(h.command)));
+    expect(commands).toEqual(['hook pre-tool-use']);
+    for (const command of commands) expect(isKnown(command)).toBe(true);
   });
 });

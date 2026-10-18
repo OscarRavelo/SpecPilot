@@ -86,6 +86,17 @@ The grill phase closes (`specpilot gate`) only when the ledger check is clean, n
 
 Claude Code templates for this phase: the [`sp-grill` skill](templates/.claude/skills/sp-grill/SKILL.md), which runs the one-question-at-a-time loop, and the [`grill-auditor` subagent](templates/.claude/agents/grill-auditor.md), a clean-context reviewer that cannot edit code.
 
+Phase hooks keep the agent inside the workflow. The [`settings.json` template](templates/.claude/settings.json) runs `specpilot hook pre-tool-use` before every `Write`, `Edit`, `MultiEdit` and `NotebookEdit`, and blocks the edit (exit code 2, with the reason shown to the agent) when the task's phase does not allow it:
+
+| Phase | Tests | Source code |
+|---|---|---|
+| `research`, `grill`, `plan` | blocked | blocked |
+| `red` | allowed | blocked |
+| `green`, `mutation` | blocked | allowed |
+| `verify` | blocked | blocked |
+
+Test files are `*.test.*` / `*.spec.*` and anything under `test/`, `tests/` or `__tests__/`; source code is any other `.ts`, `.tsx`, `.js` or `.jsx` file (including `.mjs`/`.cjs`). Other files, such as docs, the spec and the grill ledger, can always be edited. `state.json` can never be edited by the agent (only `gate` and `reopen` move a task), and `audit.md` can only be written by the `grill-auditor` subagent. With no active task, nothing is blocked. With several active tasks, an edit must be allowed by all of them, unless `SPECPILOT_TASK=<task-id>` chooses the one you are working on. A corrupt `state.json` blocks code and test edits instead of letting them through. Known limit: the hook checks file-editing tools, not files written from a Bash command.
+
 ```bash
 npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
 npx specpilot ledger check TASK-101              # check every citation in the grill ledger
@@ -107,8 +118,8 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 2 | Task state machine: `status`, `gate`, `reopen` | ✅ Done | Every illegal phase move is rejected; state persists in `state.json` |
 | 3 | Grill ledger and citation checker: `ledger check` | ✅ Done | A real citation passes; a missing file, wrong line or altered snippet fails |
 | 4 | Grill-me skill, checklist and auditor subagent | ✅ Done | A spec with a planted ambiguity cannot leave the grill phase; a stale or blocked audit fails the gate |
-| 5 | Phase hooks in Claude Code | ⏳ Next | Editing code before the red phase is blocked |
-| 6 | `tdd red` / `tdd green` with evidence | — | Red must fail on an assertion; tests cannot change after green |
+| 5 | Phase hooks in Claude Code | ✅ Done | Editing code before the red phase is blocked |
+| 6 | `tdd red` / `tdd green` with evidence | ⏳ Next | Red must fail on an assertion; tests cannot change after green |
 | 7 | `mutate`: Stryker plus targeted bugs | — | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |
 | 8 | `verify` and the false "done" detector | — | A criterion with no test blocks the task and counts as a hallucination |
 | 9 | Cost and latency metrics, Standard/Max modes | — | A known transcript gives exact tokens and € |
