@@ -76,8 +76,10 @@ export function mutantId(file: string, line: number, mutator: string, replacemen
 }
 
 // A glob matching exactly one file. Stryker turns every backslash in the pattern into "/" before
-// matching, so glob characters are escaped as character classes ("[*]", "[[]") instead. "!" needs no
-// escape: it is only special at the start of the pattern, which Stryker resolves to an absolute path.
+// matching, so glob characters are escaped as character classes ("[*]", "[[]") instead. "!" is not
+// escaped: disableTypeChecks resolves the pattern to an absolute path, so it never starts with "!".
+// Stryker checks a mutate entry for a leading "!" before resolving it, so a root-level file whose
+// name starts with "!" becomes an exclude and is never mutated (a known limit).
 const exactFileGlob = (file: string) => file.replace(/[*?()[\]]/g, '[$&]');
 
 // A glob matching exactly the given files; several files become a {a,b} list.
