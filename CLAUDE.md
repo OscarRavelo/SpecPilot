@@ -14,12 +14,13 @@ It is a TypeScript CLI: sources in `src/`, compiled to `dist/`, tests in `test/*
 ## Hard rules
 
 - Nobody marks a task done without running `npm test` and showing the output.
-- No task is done until the mutation phase (Stryker) has run.
+- Developing SpecPilot itself: mutation (Stryker over the code changed since the previous release) is required before each release (v0.1, v0.2, ...), not for every task. A task is done once its tests are green and reviewed.
+- Projects that use SpecPilot are not affected: there, `specpilot mutate` stays mandatory for every task, and no task is done until its mutation gate passes.
 - SpecPilot itself is built with two subagents in `.claude/agents/`: `tests-agent` may only edit `test/`, `code-agent` may only edit `src/`.
 - Both agents write files only with Edit/Write. The hook blocks any Bash command of theirs that is not on its read-only allowlist, and it blocks anything it cannot classify.
 - The main session only coordinates: it calls the agents, runs `npm test` and reports to the human. It never edits `test/` or `src/` directly.
 - `.claude/settings.json` enforces these roles with `specpilot hook pre-tool-use --roles`, run from `dist/` (`npm run build` first). If the hook itself fails, every edit is blocked: stop and ask the human how to fix it, one question at a time, before doing anything else.
-- A surviving mutant in the mutation phase is a test gap, and nobody adds tests in mutation. The agent stops, reports the gap and runs `specpilot reopen <task> red`. Then `code-agent` puts the surviving mutant back, `tests-agent` writes the missing test and sees it fail against the mutant (red: `specpilot tdd red <task>`), `code-agent` removes the mutant (green: `specpilot tdd green <task>`), and mutation runs again.
+- A surviving mutant is a test gap, and nobody adds tests in mutation. The agent stops, reports the gap and runs `specpilot reopen <task> red`. Then `code-agent` puts the surviving mutant back, `tests-agent` writes the missing test and sees it fail against the mutant (red: `specpilot tdd red <task>`), `code-agent` removes the mutant (green: `specpilot tdd green <task>`), and mutation runs again.
 
 ## Phases
 
@@ -48,7 +49,7 @@ npm run typecheck   # tsc type check, no emit
 npm run build       # compile src/ → dist/
 ```
 
-Mutation phase (Stryker is a devDependency):
+Mutation (Stryker is a devDependency). In projects that use SpecPilot this runs for every task; in SpecPilot itself, before each release:
 
 ```
 npx specpilot mutate <task>           # Stryker over the task's code; survivors go to equivalents.md
