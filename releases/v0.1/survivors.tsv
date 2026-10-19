@@ -1,0 +1,763 @@
+file	line	mutator	status	replacement
+src/cli.ts	42	StringLiteral	NoCoverage	""
+src/cli.ts	44	StringLiteral	NoCoverage	``
+src/cli.ts	65	StringLiteral	NoCoverage	""
+src/cli.ts	65	StringLiteral	NoCoverage	""
+src/cli.ts	65	StringLiteral	NoCoverage	""
+src/cli.ts	69	StringLiteral	NoCoverage	""
+src/cli.ts	77	CallExpression	NoCoverage	;
+src/cli.ts	77	StringLiteral	NoCoverage	``
+src/cli.ts	82	ConditionalExpression	NoCoverage	true
+src/cli.ts	82	ConditionalExpression	NoCoverage	false
+src/cli.ts	82	BlockStatement	NoCoverage	{}
+src/cli.ts	85	StringLiteral	NoCoverage	``
+src/cli.ts	85	ConditionalExpression	NoCoverage	false
+src/cli.ts	85	ConditionalExpression	NoCoverage	true
+src/cli.ts	85	EqualityOperator	NoCoverage	count !== 1
+src/cli.ts	85	StringLiteral	NoCoverage	""
+src/cli.ts	85	StringLiteral	NoCoverage	""
+src/cli.ts	89	BlockStatement	NoCoverage	{}
+src/cli.ts	92	StringLiteral	NoCoverage	``
+src/cli.ts	90	StringLiteral	NoCoverage	``
+src/cli.ts	92	ConditionalExpression	NoCoverage	true
+src/cli.ts	92	ConditionalExpression	NoCoverage	false
+src/cli.ts	92	EqualityOperator	NoCoverage	errors.length !== 1
+src/cli.ts	92	StringLiteral	NoCoverage	""
+src/cli.ts	92	StringLiteral	NoCoverage	""
+src/cli.ts	98	StringLiteral	NoCoverage	""
+src/cli.ts	104	StringLiteral	NoCoverage	""
+src/cli.ts	105	BooleanLiteral	NoCoverage	fs.existsSync(ledgerFile)
+src/cli.ts	105	ConditionalExpression	NoCoverage	false
+src/cli.ts	105	BlockStatement	NoCoverage	{}
+src/cli.ts	106	StringLiteral	NoCoverage	``
+src/cli.ts	110	StringLiteral	NoCoverage	""
+src/cli.ts	113	ConditionalExpression	NoCoverage	true
+src/cli.ts	113	ConditionalExpression	NoCoverage	false
+src/cli.ts	113	BlockStatement	NoCoverage	{}
+src/cli.ts	115	ArrowFunction	NoCoverage	() => undefined
+src/cli.ts	115	ArithmeticOperator	NoCoverage	total - fact.citations.length
+src/cli.ts	116	StringLiteral	NoCoverage	``
+src/cli.ts	120	BlockStatement	NoCoverage	{}
+src/cli.ts	121	StringLiteral	NoCoverage	``
+src/cli.ts	123	StringLiteral	NoCoverage	``
+src/cli.ts	123	ConditionalExpression	NoCoverage	true
+src/cli.ts	123	ConditionalExpression	NoCoverage	false
+src/cli.ts	123	EqualityOperator	NoCoverage	errors.length !== 1
+src/cli.ts	123	StringLiteral	NoCoverage	""
+src/cli.ts	123	StringLiteral	NoCoverage	""
+src/cli.ts	129	StringLiteral	NoCoverage	""
+src/cli.ts	135	StringLiteral	NoCoverage	""
+src/cli.ts	137	StringLiteral	NoCoverage	""
+src/cli.ts	141	MethodExpression	NoCoverage	checklist
+src/cli.ts	141	ArrowFunction	NoCoverage	() => undefined
+src/cli.ts	142	StringLiteral	NoCoverage	``
+src/cli.ts	143	BlockStatement	NoCoverage	{}
+src/cli.ts	144	StringLiteral	NoCoverage	``
+src/cli.ts	144	StringLiteral	NoCoverage	""
+src/cli.ts	144	StringLiteral	NoCoverage	""
+src/cli.ts	151	StringLiteral	NoCoverage	""
+src/cli.ts	157	StringLiteral	NoCoverage	""
+src/cli.ts	158	BooleanLiteral	NoCoverage	fs.existsSync(ledgerFile)
+src/cli.ts	158	ConditionalExpression	NoCoverage	false
+src/cli.ts	158	BlockStatement	NoCoverage	{}
+src/cli.ts	159	StringLiteral	NoCoverage	``
+src/cli.ts	162	StringLiteral	NoCoverage	""
+src/cli.ts	169	ConditionalExpression	NoCoverage	true
+src/cli.ts	169	ConditionalExpression	NoCoverage	false
+src/cli.ts	169	EqualityOperator	NoCoverage	tasks.length !== 0
+src/cli.ts	169	BlockStatement	NoCoverage	{}
+src/cli.ts	170	StringLiteral	NoCoverage	``
+src/cli.ts	173	BlockStatement	NoCoverage	{}
+src/cli.ts	174	StringLiteral	NoCoverage	``
+src/cli.ts	181	BooleanLiteral	NoCoverage	fs.existsSync(taskDir)
+src/cli.ts	181	ConditionalExpression	NoCoverage	true
+src/cli.ts	181	ConditionalExpression	NoCoverage	false
+src/cli.ts	181	BlockStatement	NoCoverage	{}
+src/cli.ts	182	StringLiteral	NoCoverage	``
+src/cli.ts	190	StringLiteral	NoCoverage	""
+src/cli.ts	198	BooleanLiteral	NoCoverage	result.ok
+src/cli.ts	198	ConditionalExpression	NoCoverage	true
+src/cli.ts	198	ConditionalExpression	NoCoverage	false
+src/cli.ts	198	BlockStatement	NoCoverage	{}
+src/cli.ts	199	StringLiteral	NoCoverage	``
+src/cli.ts	200	StringLiteral	NoCoverage	``
+src/cli.ts	206	CallExpression	NoCoverage	;
+src/cli.ts	207	StringLiteral	NoCoverage	``
+src/cli.ts	213	StringLiteral	NoCoverage	""
+src/cli.ts	220	ConditionalExpression	NoCoverage	false
+src/cli.ts	220	EqualityOperator	NoCoverage	phase !== nextPhase(state.phase)
+src/cli.ts	220	BlockStatement	NoCoverage	{}
+src/cli.ts	221	StringLiteral	NoCoverage	``
+src/cli.ts	224	BooleanLiteral	NoCoverage	isBackward(state.phase, phase)
+src/cli.ts	224	ConditionalExpression	NoCoverage	false
+src/cli.ts	224	BlockStatement	NoCoverage	{}
+src/cli.ts	225	StringLiteral	NoCoverage	``
+src/cli.ts	230	CallExpression	NoCoverage	;
+src/cli.ts	231	StringLiteral	NoCoverage	``
+src/cli.ts	237	ConditionalExpression	NoCoverage	true
+src/cli.ts	237	ConditionalExpression	NoCoverage	false
+src/cli.ts	237	StringLiteral	NoCoverage	""
+src/cli.ts	238	ConditionalExpression	NoCoverage	true
+src/cli.ts	238	ConditionalExpression	NoCoverage	false
+src/cli.ts	238	LogicalOperator	NoCoverage	event !== 'pre-tool-use' && flags.some(flag => flag !== '--r
+src/cli.ts	238	ConditionalExpression	NoCoverage	false
+src/cli.ts	238	EqualityOperator	NoCoverage	event === 'pre-tool-use'
+src/cli.ts	238	StringLiteral	NoCoverage	""
+src/cli.ts	238	MethodExpression	NoCoverage	flags.every(flag => flag !== '--roles')
+src/cli.ts	238	ArrowFunction	NoCoverage	() => undefined
+src/cli.ts	238	ConditionalExpression	NoCoverage	true
+src/cli.ts	238	ConditionalExpression	NoCoverage	false
+src/cli.ts	238	EqualityOperator	NoCoverage	flag === '--roles'
+src/cli.ts	238	StringLiteral	NoCoverage	""
+src/cli.ts	238	BlockStatement	NoCoverage	{}
+src/cli.ts	239	StringLiteral	NoCoverage	""
+src/cli.ts	242	StringLiteral	NoCoverage	""
+src/cli.ts	248	StringLiteral	NoCoverage	""
+src/cli.ts	251	ConditionalExpression	NoCoverage	true
+src/cli.ts	251	ConditionalExpression	NoCoverage	false
+src/cli.ts	251	LogicalOperator	NoCoverage	(!input || typeof input.tool_name !== 'string' || typeof inp
+src/cli.ts	251	ConditionalExpression	NoCoverage	false
+src/cli.ts	251	LogicalOperator	NoCoverage	(!input || typeof input.tool_name !== 'string') && typeof in
+src/cli.ts	251	ConditionalExpression	NoCoverage	false
+src/cli.ts	251	ConditionalExpression	NoCoverage	false
+src/cli.ts	251	EqualityOperator	NoCoverage	typeof input.tool_name === 'string'
+src/cli.ts	251	ConditionalExpression	NoCoverage	false
+src/cli.ts	251	EqualityOperator	NoCoverage	typeof input.tool_input === 'object'
+src/cli.ts	251	BooleanLiteral	NoCoverage	input.tool_input
+src/cli.ts	251	BlockStatement	NoCoverage	{}
+src/cli.ts	252	StringLiteral	NoCoverage	""
+src/cli.ts	257	LogicalOperator	NoCoverage	process.env.SPECPILOT_TASK && undefined
+src/cli.ts	258	ConditionalExpression	NoCoverage	true
+src/cli.ts	258	ConditionalExpression	NoCoverage	false
+src/cli.ts	259	CallExpression	NoCoverage	;
+src/cli.ts	266	BlockStatement	NoCoverage	{}
+src/cli.ts	267	CallExpression	NoCoverage	;
+src/cli.ts	272	LogicalOperator	NoCoverage	process.env.SPECPILOT_TASK && undefined
+src/cli.ts	273	ConditionalExpression	NoCoverage	true
+src/cli.ts	273	ConditionalExpression	NoCoverage	false
+src/cli.ts	273	EqualityOperator	NoCoverage	warning === null
+src/cli.ts	273	ObjectLiteral	NoCoverage	{}
+src/cli.ts	277	StringLiteral	NoCoverage	``
+src/cli.ts	277	ConditionalExpression	NoCoverage	true
+src/cli.ts	277	ConditionalExpression	NoCoverage	false
+src/cli.ts	277	EqualityOperator	NoCoverage	count !== 1
+src/cli.ts	277	StringLiteral	NoCoverage	"Stryker was here!"
+src/cli.ts	277	StringLiteral	NoCoverage	""
+src/cli.ts	282	StringLiteral	NoCoverage	""
+src/cli.ts	289	ConditionalExpression	NoCoverage	false
+src/cli.ts	289	EqualityOperator	NoCoverage	state.phase === stage
+src/cli.ts	289	BlockStatement	NoCoverage	{}
+src/cli.ts	290	StringLiteral	NoCoverage	``
+src/cli.ts	294	ConditionalExpression	NoCoverage	true
+src/cli.ts	294	ConditionalExpression	NoCoverage	false
+src/cli.ts	294	EqualityOperator	NoCoverage	stage !== 'green'
+src/cli.ts	295	LogicalOperator	NoCoverage	stage === 'green' || !red
+src/cli.ts	295	ConditionalExpression	NoCoverage	false
+src/cli.ts	295	ConditionalExpression	NoCoverage	true
+src/cli.ts	295	EqualityOperator	NoCoverage	stage !== 'green'
+src/cli.ts	295	BooleanLiteral	NoCoverage	red
+src/cli.ts	296	StringLiteral	NoCoverage	``
+src/cli.ts	295	BlockStatement	NoCoverage	{}
+src/cli.ts	302	ConditionalExpression	NoCoverage	true
+src/cli.ts	302	EqualityOperator	NoCoverage	stage !== 'red'
+src/cli.ts	302	ConditionalExpression	NoCoverage	false
+src/cli.ts	303	BlockStatement	NoCoverage	{}
+src/cli.ts	305	ConditionalExpression	NoCoverage	true
+src/cli.ts	305	ConditionalExpression	NoCoverage	false
+src/cli.ts	305	EqualityOperator	NoCoverage	changes.length >= 0
+src/cli.ts	305	EqualityOperator	NoCoverage	changes.length <= 0
+src/cli.ts	305	BlockStatement	NoCoverage	{}
+src/cli.ts	306	StringLiteral	NoCoverage	``
+src/cli.ts	306	StringLiteral	NoCoverage	""
+src/cli.ts	309	ConditionalExpression	NoCoverage	false
+src/cli.ts	309	EqualityOperator	NoCoverage	problems.length >= 0
+src/cli.ts	309	EqualityOperator	NoCoverage	problems.length <= 0
+src/cli.ts	309	BlockStatement	NoCoverage	{}
+src/cli.ts	310	StringLiteral	NoCoverage	``
+src/cli.ts	311	StringLiteral	NoCoverage	``
+src/cli.ts	315	ConditionalExpression	NoCoverage	true
+src/cli.ts	315	ConditionalExpression	NoCoverage	false
+src/cli.ts	315	EqualityOperator	NoCoverage	stage !== 'red'
+src/cli.ts	318	ConditionalExpression	NoCoverage	true
+src/cli.ts	318	ConditionalExpression	NoCoverage	false
+src/cli.ts	318	EqualityOperator	NoCoverage	stage !== 'red'
+src/cli.ts	318	BlockStatement	NoCoverage	{}
+src/cli.ts	319	StringLiteral	NoCoverage	``
+src/cli.ts	319	StringLiteral	NoCoverage	""
+src/cli.ts	320	StringLiteral	NoCoverage	``
+src/cli.ts	322	StringLiteral	NoCoverage	``
+src/cli.ts	321	BlockStatement	NoCoverage	{}
+src/cli.ts	322	ConditionalExpression	NoCoverage	true
+src/cli.ts	322	ConditionalExpression	NoCoverage	false
+src/cli.ts	322	EqualityOperator	NoCoverage	tests.length !== 1
+src/cli.ts	322	StringLiteral	NoCoverage	""
+src/cli.ts	322	StringLiteral	NoCoverage	""
+src/cli.ts	324	StringLiteral	NoCoverage	``
+src/cli.ts	330	ConditionalExpression	NoCoverage	false
+src/cli.ts	330	ConditionalExpression	NoCoverage	true
+src/cli.ts	330	EqualityOperator	NoCoverage	args[0] !== 'bug'
+src/cli.ts	330	StringLiteral	NoCoverage	""
+src/cli.ts	331	MethodExpression	NoCoverage	args
+src/cli.ts	332	ConditionalExpression	NoCoverage	false
+src/cli.ts	332	LogicalOperator	NoCoverage	!taskId && bug && !acId
+src/cli.ts	332	BooleanLiteral	NoCoverage	taskId
+src/cli.ts	332	ConditionalExpression	NoCoverage	false
+src/cli.ts	332	LogicalOperator	NoCoverage	bug || !acId
+src/cli.ts	332	BooleanLiteral	NoCoverage	acId
+src/cli.ts	332	BlockStatement	NoCoverage	{}
+src/cli.ts	333	StringLiteral	NoCoverage	""
+src/cli.ts	336	StringLiteral	NoCoverage	""
+src/cli.ts	336	StringLiteral	NoCoverage	""
+src/cli.ts	358	ConditionalExpression	NoCoverage	false
+src/cli.ts	358	EqualityOperator	NoCoverage	state.phase === 'mutation'
+src/cli.ts	358	BlockStatement	NoCoverage	{}
+src/cli.ts	359	StringLiteral	NoCoverage	``
+src/cli.ts	364	StringLiteral	NoCoverage	``
+src/cli.ts	367	BooleanLiteral	NoCoverage	green.sourceFiles
+src/cli.ts	367	ConditionalExpression	NoCoverage	false
+src/cli.ts	367	BlockStatement	NoCoverage	{}
+src/cli.ts	374	ConditionalExpression	NoCoverage	true
+src/cli.ts	374	ConditionalExpression	NoCoverage	false
+src/cli.ts	374	EqualityOperator	NoCoverage	changes.length >= 0
+src/cli.ts	374	EqualityOperator	NoCoverage	changes.length <= 0
+src/cli.ts	374	BlockStatement	NoCoverage	{}
+src/cli.ts	375	StringLiteral	NoCoverage	``
+src/cli.ts	375	StringLiteral	NoCoverage	""
+src/cli.ts	400	ConditionalExpression	NoCoverage	false
+src/cli.ts	400	EqualityOperator	NoCoverage	changes.length >= 0
+src/cli.ts	400	EqualityOperator	NoCoverage	changes.length <= 0
+src/cli.ts	400	BlockStatement	NoCoverage	{}
+src/cli.ts	402	StringLiteral	NoCoverage	``
+src/cli.ts	402	StringLiteral	NoCoverage	""
+src/cli.ts	407	StringLiteral	NoCoverage	``
+src/cli.ts	410	BooleanLiteral	NoCoverage	red.sourceFiles
+src/cli.ts	410	ConditionalExpression	NoCoverage	false
+src/cli.ts	410	BlockStatement	NoCoverage	{}
+src/cli.ts	417	MethodExpression	NoCoverage	[...new Set([...taskSourceFiles(red, green), ...(previous.fi
+src/cli.ts	417	ArrayDeclaration	NoCoverage	[]
+src/cli.ts	417	MethodExpression	NoCoverage	[...new Set([...taskSourceFiles(red, green), ...(previous.fi
+src/cli.ts	418	ArrayDeclaration	NoCoverage	[]
+src/cli.ts	420	ArrayDeclaration	NoCoverage	["Stryker was here"]
+src/cli.ts	424	ArrowFunction	NoCoverage	() => undefined
+src/cli.ts	426	ConditionalExpression	NoCoverage	true
+src/cli.ts	426	ConditionalExpression	NoCoverage	false
+src/cli.ts	426	EqualityOperator	NoCoverage	files.length !== 0
+src/cli.ts	426	BlockStatement	NoCoverage	{}
+src/cli.ts	427	StringLiteral	NoCoverage	``
+src/cli.ts	431	ConditionalExpression	NoCoverage	true
+src/cli.ts	431	ConditionalExpression	NoCoverage	false
+src/cli.ts	431	BlockStatement	NoCoverage	{}
+src/cli.ts	432	CallExpression	NoCoverage	;
+src/cli.ts	439	StringLiteral	NoCoverage	""
+src/cli.ts	441	CallExpression	NoCoverage	;
+src/cli.ts	443	MethodExpression	NoCoverage	mutants
+src/cli.ts	443	ArrowFunction	NoCoverage	() => undefined
+src/cli.ts	445	StringLiteral	NoCoverage	``
+src/cli.ts	445	StringLiteral	NoCoverage	""
+src/cli.ts	445	StringLiteral	NoCoverage	""
+src/cli.ts	445	StringLiteral	NoCoverage	""
+src/cli.ts	446	StringLiteral	NoCoverage	``
+src/cli.ts	446	StringLiteral	NoCoverage	""
+src/cli.ts	446	StringLiteral	NoCoverage	""
+src/cli.ts	449	ConditionalExpression	NoCoverage	true
+src/cli.ts	449	ConditionalExpression	NoCoverage	false
+src/cli.ts	449	EqualityOperator	NoCoverage	gaps.length >= 0
+src/cli.ts	449	EqualityOperator	NoCoverage	gaps.length <= 0
+src/cli.ts	449	BlockStatement	NoCoverage	{}
+src/cli.ts	450	StringLiteral	NoCoverage	``
+src/cli.ts	450	StringLiteral	NoCoverage	""
+src/cli.ts	451	StringLiteral	NoCoverage	``
+src/cli.ts	452	StringLiteral	NoCoverage	``
+src/cli.ts	453	StringLiteral	NoCoverage	``
+src/cli.ts	456	StringLiteral	NoCoverage	``
+src/cli.ts	462	StringLiteral	NoCoverage	""
+src/cli.ts	463	BooleanLiteral	NoCoverage	acceptanceCriteria.some(ac => ac.id === acId)
+src/cli.ts	463	ConditionalExpression	NoCoverage	true
+src/cli.ts	463	ConditionalExpression	NoCoverage	false
+src/cli.ts	463	MethodExpression	NoCoverage	acceptanceCriteria.every(ac => ac.id === acId)
+src/cli.ts	463	ArrowFunction	NoCoverage	() => undefined
+src/cli.ts	463	ConditionalExpression	NoCoverage	true
+src/cli.ts	463	ConditionalExpression	NoCoverage	false
+src/cli.ts	463	EqualityOperator	NoCoverage	ac.id !== acId
+src/cli.ts	463	BlockStatement	NoCoverage	{}
+src/cli.ts	464	ArrowFunction	NoCoverage	() => undefined
+src/cli.ts	464	StringLiteral	NoCoverage	""
+src/cli.ts	465	StringLiteral	NoCoverage	``
+src/cli.ts	465	ConditionalExpression	NoCoverage	true
+src/cli.ts	465	ConditionalExpression	NoCoverage	false
+src/cli.ts	465	LogicalOperator	NoCoverage	known && 'none'
+src/cli.ts	465	StringLiteral	NoCoverage	""
+src/cli.ts	468	ConditionalExpression	NoCoverage	true
+src/cli.ts	468	ConditionalExpression	NoCoverage	false
+src/cli.ts	468	EqualityOperator	NoCoverage	hashChanges(green.sourceFiles, sourceFiles).length !== 0
+src/cli.ts	468	BlockStatement	NoCoverage	{}
+src/cli.ts	469	StringLiteral	NoCoverage	``
+src/cli.ts	477	ConditionalExpression	NoCoverage	true
+src/cli.ts	477	ConditionalExpression	NoCoverage	false
+src/cli.ts	477	EqualityOperator	NoCoverage	problems.length !== 0
+src/cli.ts	478	ArrayDeclaration	NoCoverage	[]
+src/cli.ts	480	ConditionalExpression	NoCoverage	true
+src/cli.ts	480	ConditionalExpression	NoCoverage	false
+src/cli.ts	480	EqualityOperator	NoCoverage	problems.length >= 0
+src/cli.ts	480	EqualityOperator	NoCoverage	problems.length <= 0
+src/cli.ts	480	BlockStatement	NoCoverage	{}
+src/cli.ts	481	StringLiteral	NoCoverage	``
+src/cli.ts	482	StringLiteral	NoCoverage	``
+src/cli.ts	483	StringLiteral	NoCoverage	``
+src/cli.ts	486	StringLiteral	NoCoverage	``
+src/cli.ts	486	StringLiteral	NoCoverage	""
+src/cli.ts	487	StringLiteral	NoCoverage	``
+src/cli.ts	488	StringLiteral	NoCoverage	``
+src/cli.ts	493	ConditionalExpression	NoCoverage	true
+src/cli.ts	493	ConditionalExpression	NoCoverage	false
+src/cli.ts	493	ConditionalExpression	NoCoverage	false
+src/cli.ts	493	StringLiteral	NoCoverage	""
+src/cli.ts	493	ConditionalExpression	NoCoverage	false
+src/cli.ts	493	StringLiteral	NoCoverage	""
+src/cli.ts	493	BlockStatement	NoCoverage	{}
+src/cli.ts	494	CallExpression	NoCoverage	;
+src/cli.ts	497	BooleanLiteral	NoCoverage	command
+src/cli.ts	497	ConditionalExpression	NoCoverage	true
+src/cli.ts	497	ConditionalExpression	NoCoverage	false
+src/cli.ts	497	BlockStatement	NoCoverage	{}
+src/cli.ts	498	CallExpression	NoCoverage	;
+src/cli.ts	501	ConditionalExpression	NoCoverage	true
+src/cli.ts	501	ConditionalExpression	NoCoverage	false
+src/cli.ts	501	LogicalOperator	NoCoverage	command === 'spec' || args[0] === 'lint'
+src/cli.ts	501	ConditionalExpression	NoCoverage	true
+src/cli.ts	501	EqualityOperator	NoCoverage	command !== 'spec'
+src/cli.ts	501	StringLiteral	NoCoverage	""
+src/cli.ts	501	ConditionalExpression	NoCoverage	true
+src/cli.ts	501	EqualityOperator	NoCoverage	args[0] !== 'lint'
+src/cli.ts	501	StringLiteral	NoCoverage	""
+src/cli.ts	502	ConditionalExpression	NoCoverage	true
+src/cli.ts	502	ConditionalExpression	NoCoverage	false
+src/cli.ts	502	LogicalOperator	NoCoverage	command === 'ledger' || args[0] === 'check'
+src/cli.ts	502	ConditionalExpression	NoCoverage	true
+src/cli.ts	502	EqualityOperator	NoCoverage	command !== 'ledger'
+src/cli.ts	502	StringLiteral	NoCoverage	""
+src/cli.ts	502	ConditionalExpression	NoCoverage	true
+src/cli.ts	502	EqualityOperator	NoCoverage	args[0] !== 'check'
+src/cli.ts	502	StringLiteral	NoCoverage	""
+src/cli.ts	503	ConditionalExpression	NoCoverage	true
+src/cli.ts	503	ConditionalExpression	NoCoverage	false
+src/cli.ts	503	LogicalOperator	NoCoverage	command === 'grill' || args[0] === 'checklist'
+src/cli.ts	503	ConditionalExpression	NoCoverage	true
+src/cli.ts	503	EqualityOperator	NoCoverage	command !== 'grill'
+src/cli.ts	503	StringLiteral	NoCoverage	""
+src/cli.ts	503	ConditionalExpression	NoCoverage	true
+src/cli.ts	503	EqualityOperator	NoCoverage	args[0] !== 'checklist'
+src/cli.ts	503	StringLiteral	NoCoverage	""
+src/cli.ts	504	ConditionalExpression	NoCoverage	true
+src/cli.ts	504	ConditionalExpression	NoCoverage	false
+src/cli.ts	504	LogicalOperator	NoCoverage	command === 'grill' || args[0] === 'hash'
+src/cli.ts	504	ConditionalExpression	NoCoverage	true
+src/cli.ts	504	EqualityOperator	NoCoverage	command !== 'grill'
+src/cli.ts	504	StringLiteral	NoCoverage	""
+src/cli.ts	504	ConditionalExpression	NoCoverage	true
+src/cli.ts	504	EqualityOperator	NoCoverage	args[0] !== 'hash'
+src/cli.ts	504	StringLiteral	NoCoverage	""
+src/cli.ts	505	ConditionalExpression	NoCoverage	true
+src/cli.ts	505	ConditionalExpression	NoCoverage	false
+src/cli.ts	505	StringLiteral	NoCoverage	""
+src/cli.ts	505	MethodExpression	NoCoverage	args
+src/cli.ts	506	ConditionalExpression	NoCoverage	true
+src/cli.ts	506	ConditionalExpression	NoCoverage	false
+src/cli.ts	506	StringLiteral	NoCoverage	""
+src/cli.ts	507	ConditionalExpression	NoCoverage	true
+src/cli.ts	507	ConditionalExpression	NoCoverage	false
+src/cli.ts	507	StringLiteral	NoCoverage	""
+src/cli.ts	508	ConditionalExpression	NoCoverage	true
+src/cli.ts	508	ConditionalExpression	NoCoverage	false
+src/cli.ts	508	StringLiteral	NoCoverage	""
+src/cli.ts	509	ConditionalExpression	NoCoverage	true
+src/cli.ts	509	ConditionalExpression	NoCoverage	false
+src/cli.ts	509	StringLiteral	NoCoverage	""
+src/cli.ts	510	ConditionalExpression	NoCoverage	true
+src/cli.ts	510	ConditionalExpression	NoCoverage	false
+src/cli.ts	510	EqualityOperator	NoCoverage	command !== 'mutate'
+src/cli.ts	510	StringLiteral	NoCoverage	""
+src/cli.ts	511	ConditionalExpression	NoCoverage	true
+src/cli.ts	511	ConditionalExpression	NoCoverage	false
+src/cli.ts	511	BlockStatement	NoCoverage	{}
+src/cli.ts	512	StringLiteral	NoCoverage	``
+src/cli.ts	515	StringLiteral	NoCoverage	``
+src/cli.ts	520	BlockStatement	NoCoverage	{}
+src/cli.ts	521	MethodExpression	NoCoverage	process.argv
+src/cli.ts	522	BlockStatement	NoCoverage	{}
+src/cli.ts	523	CallExpression	NoCoverage	;
+src/gates.ts	70	ArrayDeclaration	Survived	["Stryker was here"]
+src/gates.ts	103	StringLiteral	Survived	""
+src/gates.ts	118	StringLiteral	Survived	""
+src/gates.ts	123	StringLiteral	Survived	""
+src/gates.ts	148	StringLiteral	Survived	""
+src/gates.ts	151	ConditionalExpression	Survived	false
+src/gates.ts	151	BlockStatement	Survived	{}
+src/gates.ts	152	StringLiteral	Survived	""
+src/gates.ts	161	StringLiteral	Survived	""
+src/gates.ts	170	StringLiteral	Survived	""
+src/gates.ts	181	ConditionalExpression	Survived	true
+src/hooks.ts	21	Regex	Survived	/\.(test|spec)\.[cm]?[jt]sx?/
+src/hooks.ts	21	Regex	Survived	/\.(test|spec)\.[^cm]?[jt]sx?$/
+src/hooks.ts	35	ArrayDeclaration	Survived	[]
+src/hooks.ts	45	LogicalOperator	Survived	parts.length === 3 || parts[0] === 'specs'
+src/hooks.ts	45	ConditionalExpression	Survived	true
+src/hooks.ts	45	ConditionalExpression	Survived	true
+src/hooks.ts	49	MethodExpression	Survived	parts
+src/hooks.ts	113	StringLiteral	NoCoverage	"Stryker was here!"
+src/hooks.ts	68	EqualityOperator	Survived	i <= command.length
+src/hooks.ts	69	ConditionalExpression	Survived	false
+src/hooks.ts	69	ConditionalExpression	Survived	true
+src/hooks.ts	69	StringLiteral	Survived	""
+src/hooks.ts	69	EqualityOperator	Survived	quote !== '"'
+src/hooks.ts	69	StringLiteral	Survived	""
+src/hooks.ts	76	Regex	Survived	/\d+$/
+src/hooks.ts	76	Regex	Survived	/^\d+/
+src/hooks.ts	76	Regex	Survived	/^\d$/
+src/hooks.ts	84	BooleanLiteral	Survived	true
+src/hooks.ts	93	ConditionalExpression	Survived	false
+src/hooks.ts	93	StringLiteral	Survived	""
+src/hooks.ts	97	ConditionalExpression	Survived	false
+src/hooks.ts	97	StringLiteral	Survived	""
+src/hooks.ts	99	ConditionalExpression	Survived	false
+src/hooks.ts	99	UnaryOperator	Survived	+1
+src/hooks.ts	113	ArithmeticOperator	Survived	i - 1
+src/hooks.ts	113	LogicalOperator	Survived	command[i + 1] && ''
+src/hooks.ts	121	ConditionalExpression	Survived	true
+src/hooks.ts	121	ConditionalExpression	Survived	false
+src/hooks.ts	121	EqualityOperator	Survived	c !== '"'
+src/hooks.ts	121	MethodExpression	Survived	command
+src/hooks.ts	121	ArithmeticOperator	Survived	i - 1
+src/hooks.ts	121	Regex	Survived	/\\([^"\\$`])/g
+src/hooks.ts	121	StringLiteral	Survived	""
+src/hooks.ts	122	BooleanLiteral	Survived	false
+src/hooks.ts	124	ConditionalExpression	Survived	false
+src/hooks.ts	124	ConditionalExpression	Survived	true
+src/hooks.ts	124	EqualityOperator	Survived	c !== '&'
+src/hooks.ts	124	ArithmeticOperator	Survived	i - 1
+src/hooks.ts	124	StringLiteral	Survived	""
+src/hooks.ts	125	ConditionalExpression	Survived	false
+src/hooks.ts	125	UpdateOperator	Survived	i--
+src/hooks.ts	126	ConditionalExpression	Survived	true
+src/hooks.ts	126	Regex	Survived	/\d+$/
+src/hooks.ts	126	Regex	Survived	/^\d+/
+src/hooks.ts	126	Regex	Survived	/^\d$/
+src/hooks.ts	127	CallExpression	Survived	;
+src/hooks.ts	128	ConditionalExpression	Survived	false
+src/hooks.ts	128	ArithmeticOperator	Survived	i - 1
+src/hooks.ts	128	StringLiteral	Survived	""
+src/hooks.ts	137	CallExpression	Survived	;
+src/hooks.ts	139	ConditionalExpression	Survived	false
+src/hooks.ts	139	ArithmeticOperator	Survived	i - 2
+src/hooks.ts	139	StringLiteral	Survived	""
+src/hooks.ts	143	CallExpression	Survived	;
+src/hooks.ts	145	LogicalOperator	Survived	c === '\n' || heredocs.length > 0
+src/hooks.ts	145	ConditionalExpression	Survived	true
+src/hooks.ts	145	EqualityOperator	Survived	c !== '\n'
+src/hooks.ts	145	ConditionalExpression	Survived	true
+src/hooks.ts	145	EqualityOperator	Survived	heredocs.length >= 0
+src/hooks.ts	146	CallExpression	Survived	;
+src/hooks.ts	147	StringLiteral	Survived	""
+src/hooks.ts	152	EqualityOperator	Survived	consumed <= lines.length
+src/hooks.ts	152	ConditionalExpression	Survived	true
+src/hooks.ts	152	MethodExpression	Survived	lines[consumed]
+src/hooks.ts	156	ArithmeticOperator	Survived	1 + lines.slice(0, consumed).join('\n').length - 1
+src/hooks.ts	156	StringLiteral	Survived	""
+src/hooks.ts	158	CallExpression	Survived	;
+src/hooks.ts	162	ConditionalExpression	Survived	false
+src/hooks.ts	162	StringLiteral	Survived	""
+src/hooks.ts	200	ArrayDeclaration	NoCoverage	["Stryker was here"]
+src/hooks.ts	178	ConditionalExpression	Survived	false
+src/hooks.ts	186	StringLiteral	Survived	""
+src/hooks.ts	190	Regex	Survived	/-[a-zA-Z]*i/
+src/hooks.ts	192	ConditionalExpression	Survived	true
+src/hooks.ts	192	EqualityOperator	Survived	program !== 'sed'
+src/hooks.ts	192	ConditionalExpression	Survived	false
+src/hooks.ts	192	StringLiteral	Survived	""
+src/hooks.ts	192	StringLiteral	Survived	""
+src/hooks.ts	192	StringLiteral	Survived	""
+src/hooks.ts	192	StringLiteral	Survived	""
+src/hooks.ts	194	LogicalOperator	Survived	scriptOptions.includes(arg) && /^-[a-zA-Z]*e$/.test(arg)
+src/hooks.ts	194	Regex	Survived	/^-[a-zA-Z]*e/
+src/hooks.ts	194	Regex	Survived	/-[a-zA-Z]*e$/
+src/hooks.ts	194	Regex	Survived	/^-[^a-zA-Z]*e$/
+src/hooks.ts	194	Regex	Survived	/^-[a-zA-Z]e$/
+src/hooks.ts	200	ConditionalExpression	Survived	false
+src/hooks.ts	216	ConditionalExpression	Survived	true
+src/hooks.ts	216	EqualityOperator	Survived	argv.length >= 0
+src/hooks.ts	216	Regex	Survived	/[A-Za-z_][A-Za-z0-9_]*=/
+src/hooks.ts	247	StringLiteral	Survived	""
+src/hooks.ts	248	StringLiteral	Survived	""
+src/hooks.ts	250	StringLiteral	Survived	""
+src/hooks.ts	250	StringLiteral	Survived	""
+src/hooks.ts	250	StringLiteral	Survived	""
+src/hooks.ts	250	StringLiteral	Survived	""
+src/hooks.ts	250	StringLiteral	Survived	""
+src/hooks.ts	250	StringLiteral	Survived	""
+src/hooks.ts	250	StringLiteral	Survived	""
+src/hooks.ts	317	ArrayDeclaration	NoCoverage	[]
+src/hooks.ts	317	StringLiteral	NoCoverage	""
+src/hooks.ts	256	StringLiteral	Survived	""
+src/hooks.ts	258	ArrayDeclaration	Survived	[]
+src/hooks.ts	258	StringLiteral	Survived	""
+src/hooks.ts	258	StringLiteral	Survived	""
+src/hooks.ts	258	StringLiteral	Survived	""
+src/hooks.ts	258	StringLiteral	Survived	""
+src/hooks.ts	258	StringLiteral	Survived	""
+src/hooks.ts	258	StringLiteral	Survived	""
+src/hooks.ts	258	StringLiteral	Survived	""
+src/hooks.ts	259	StringLiteral	Survived	""
+src/hooks.ts	259	ArrayDeclaration	Survived	[]
+src/hooks.ts	260	BooleanLiteral	Survived	false
+src/hooks.ts	265	ObjectLiteral	Survived	{}
+src/hooks.ts	265	StringLiteral	Survived	""
+src/hooks.ts	266	StringLiteral	Survived	""
+src/hooks.ts	267	StringLiteral	Survived	""
+src/hooks.ts	270	StringLiteral	Survived	""
+src/hooks.ts	270	ArrayDeclaration	Survived	[]
+src/hooks.ts	270	StringLiteral	Survived	""
+src/hooks.ts	273	StringLiteral	Survived	""
+src/hooks.ts	274	ArrayDeclaration	Survived	[]
+src/hooks.ts	274	StringLiteral	Survived	""
+src/hooks.ts	275	ArrayDeclaration	Survived	[]
+src/hooks.ts	275	StringLiteral	Survived	""
+src/hooks.ts	275	StringLiteral	Survived	""
+src/hooks.ts	275	StringLiteral	Survived	""
+src/hooks.ts	280	ArrayDeclaration	Survived	[]
+src/hooks.ts	280	StringLiteral	Survived	""
+src/hooks.ts	280	StringLiteral	Survived	""
+src/hooks.ts	280	StringLiteral	Survived	""
+src/hooks.ts	281	ArrayDeclaration	Survived	[]
+src/hooks.ts	281	StringLiteral	Survived	""
+src/hooks.ts	284	ArrayDeclaration	Survived	[]
+src/hooks.ts	284	StringLiteral	Survived	""
+src/hooks.ts	284	StringLiteral	Survived	""
+src/hooks.ts	440	ConditionalExpression	NoCoverage	true
+src/hooks.ts	440	ConditionalExpression	NoCoverage	false
+src/hooks.ts	440	Regex	NoCoverage	/[^A-Za-z0-9_{@*#?$!-]/
+src/hooks.ts	440	StringLiteral	NoCoverage	""
+src/hooks.ts	284	StringLiteral	Survived	""
+src/hooks.ts	284	StringLiteral	Survived	""
+src/hooks.ts	284	StringLiteral	Survived	""
+src/hooks.ts	285	StringLiteral	Survived	""
+src/hooks.ts	285	StringLiteral	Survived	""
+src/hooks.ts	285	StringLiteral	Survived	""
+src/hooks.ts	285	StringLiteral	Survived	""
+src/hooks.ts	285	StringLiteral	Survived	""
+src/hooks.ts	287	StringLiteral	Survived	""
+src/hooks.ts	287	ArrayDeclaration	Survived	[]
+src/hooks.ts	287	StringLiteral	Survived	""
+src/hooks.ts	287	StringLiteral	Survived	""
+src/hooks.ts	287	StringLiteral	Survived	""
+src/hooks.ts	480	StringLiteral	NoCoverage	""
+src/hooks.ts	287	ArrayDeclaration	Survived	[]
+src/hooks.ts	287	StringLiteral	Survived	""
+src/hooks.ts	291	ObjectLiteral	Survived	{}
+src/hooks.ts	291	StringLiteral	Survived	""
+src/hooks.ts	292	ObjectLiteral	Survived	{}
+src/hooks.ts	499	StringLiteral	NoCoverage	""
+src/hooks.ts	291	StringLiteral	Survived	""
+src/hooks.ts	292	StringLiteral	Survived	""
+src/hooks.ts	293	ObjectLiteral	Survived	{}
+src/hooks.ts	293	ArrayDeclaration	Survived	[]
+src/hooks.ts	293	StringLiteral	Survived	""
+src/hooks.ts	293	StringLiteral	Survived	""
+src/hooks.ts	293	StringLiteral	Survived	""
+src/hooks.ts	299	ArrayDeclaration	Survived	[]
+src/hooks.ts	299	StringLiteral	Survived	""
+src/hooks.ts	299	StringLiteral	Survived	""
+src/hooks.ts	557	BooleanLiteral	NoCoverage	true
+src/hooks.ts	328	Regex	Survived	/AC-\d+$/
+src/hooks.ts	328	Regex	Survived	/^AC-\d+/
+src/hooks.ts	328	Regex	Survived	/^AC-\d$/
+src/hooks.ts	335	ArrowFunction	Survived	() => undefined
+src/hooks.ts	335	StringLiteral	Survived	``
+src/hooks.ts	337	StringLiteral	Survived	""
+src/hooks.ts	338	StringLiteral	Survived	""
+src/hooks.ts	339	StringLiteral	Survived	""
+src/hooks.ts	340	StringLiteral	Survived	""
+src/hooks.ts	341	StringLiteral	Survived	""
+src/hooks.ts	343	StringLiteral	Survived	""
+src/hooks.ts	351	StringLiteral	Survived	``
+src/hooks.ts	345	StringLiteral	Survived	""
+src/hooks.ts	344	StringLiteral	Survived	""
+src/hooks.ts	352	StringLiteral	Survived	``
+src/hooks.ts	359	ConditionalExpression	Survived	false
+src/hooks.ts	359	StringLiteral	Survived	""
+src/hooks.ts	360	StringLiteral	Survived	``
+src/hooks.ts	366	StringLiteral	Survived	``
+src/hooks.ts	371	StringLiteral	Survived	``
+src/hooks.ts	375	BooleanLiteral	Survived	arg.includes('=')
+src/hooks.ts	375	ConditionalExpression	Survived	true
+src/hooks.ts	375	ConditionalExpression	Survived	false
+src/hooks.ts	375	StringLiteral	Survived	""
+src/hooks.ts	375	BlockStatement	Survived	{}
+src/hooks.ts	376	ArithmeticOperator	Survived	i - 1
+src/hooks.ts	382	Regex	Survived	/-\d+$/
+src/hooks.ts	382	Regex	Survived	/^-\d+/
+src/hooks.ts	383	ConditionalExpression	Survived	false
+src/hooks.ts	383	MethodExpression	Survived	arg.endsWith('--')
+src/hooks.ts	389	StringLiteral	Survived	``
+src/hooks.ts	393	ConditionalExpression	Survived	true
+src/hooks.ts	628	ArrayDeclaration	NoCoverage	["Stryker was here"]
+src/hooks.ts	394	StringLiteral	Survived	``
+src/hooks.ts	401	StringLiteral	Survived	``
+src/hooks.ts	407	ConditionalExpression	Survived	false
+src/hooks.ts	407	StringLiteral	Survived	""
+src/hooks.ts	407	StringLiteral	Survived	""
+src/hooks.ts	407	StringLiteral	Survived	``
+src/hooks.ts	407	StringLiteral	Survived	""
+src/hooks.ts	407	StringLiteral	Survived	""
+src/hooks.ts	408	ConditionalExpression	Survived	false
+src/hooks.ts	408	Regex	Survived	/[A-Za-z_][A-Za-z0-9_]*=/
+src/hooks.ts	408	Regex	Survived	/^[^A-Za-z_][A-Za-z0-9_]*=/
+src/hooks.ts	408	StringLiteral	Survived	``
+src/hooks.ts	408	Regex	Survived	/^[A-Za-z_][A-Za-z0-9_]=/
+src/hooks.ts	408	Regex	Survived	/^[A-Za-z_][^A-Za-z0-9_]*=/
+src/hooks.ts	409	StringLiteral	Survived	""
+src/hooks.ts	409	ConditionalExpression	Survived	false
+src/hooks.ts	409	StringLiteral	Survived	""
+src/hooks.ts	411	ConditionalExpression	Survived	true
+src/hooks.ts	411	LogicalOperator	Survived	program === 'node' || args[0] === 'dist/cli.js'
+src/hooks.ts	411	ConditionalExpression	Survived	true
+src/hooks.ts	411	ConditionalExpression	Survived	true
+src/hooks.ts	415	MethodExpression	Survived	`${agentType} may not run specpilot ${subcommand.join(' ')}`
+src/hooks.ts	415	StringLiteral	Survived	``
+src/hooks.ts	415	StringLiteral	Survived	""
+src/hooks.ts	420	LogicalOperator	Survived	args[0] === 'test' || args[1] === '--'
+src/hooks.ts	420	ConditionalExpression	Survived	true
+src/hooks.ts	420	ConditionalExpression	Survived	true
+src/hooks.ts	420	StringLiteral	Survived	""
+src/hooks.ts	421	ConditionalExpression	Survived	true
+src/hooks.ts	421	ConditionalExpression	Survived	true
+src/hooks.ts	422	StringLiteral	Survived	``
+src/hooks.ts	422	StringLiteral	Survived	""
+src/hooks.ts	424	ConditionalExpression	Survived	false
+src/hooks.ts	424	ConditionalExpression	Survived	false
+src/hooks.ts	424	ConditionalExpression	Survived	false
+src/hooks.ts	424	StringLiteral	Survived	""
+src/hooks.ts	424	StringLiteral	Survived	""
+src/hooks.ts	424	MethodExpression	Survived	args[0]?.endsWith('-')
+src/hooks.ts	424	OptionalChaining	Survived	args[0].startsWith
+src/hooks.ts	424	BlockStatement	Survived	{}
+src/hooks.ts	428	StringLiteral	Survived	""
+src/hooks.ts	428	ConditionalExpression	Survived	true
+src/hooks.ts	428	EqualityOperator	Survived	args.length >= 0
+src/hooks.ts	431	ConditionalExpression	Survived	true
+src/hooks.ts	431	MethodExpression	Survived	args
+src/hooks.ts	436	StringLiteral	Survived	""
+src/hooks.ts	438	ConditionalExpression	Survived	true
+src/hooks.ts	438	StringLiteral	Survived	""
+src/hooks.ts	439	ConditionalExpression	Survived	true
+src/hooks.ts	439	StringLiteral	Survived	``
+src/hooks.ts	450	EqualityOperator	Survived	i <= command.length
+src/hooks.ts	452	StringLiteral	Survived	"Stryker was here!"
+src/hooks.ts	455	StringLiteral	Survived	""
+src/hooks.ts	456	ArithmeticOperator	Survived	i - 1
+src/hooks.ts	456	ConditionalExpression	Survived	true
+src/hooks.ts	456	EqualityOperator	Survived	j <= end
+src/hooks.ts	457	StringLiteral	Survived	""
+src/hooks.ts	458	ArithmeticOperator	Survived	j - 1
+src/hooks.ts	459	ConditionalExpression	Survived	false
+src/hooks.ts	464	StringLiteral	Survived	""
+src/hooks.ts	467	StringLiteral	Survived	""
+src/hooks.ts	468	LogicalOperator	Survived	c === '<' || next === '<'
+src/hooks.ts	468	ConditionalExpression	Survived	true
+src/hooks.ts	468	ConditionalExpression	Survived	true
+src/hooks.ts	468	EqualityOperator	Survived	c !== '<'
+src/hooks.ts	468	EqualityOperator	Survived	next !== '<'
+src/hooks.ts	468	StringLiteral	Survived	""
+src/hooks.ts	469	ConditionalExpression	Survived	true
+src/hooks.ts	469	ConditionalExpression	Survived	false
+src/hooks.ts	469	EqualityOperator	Survived	c !== '>'
+src/hooks.ts	469	StringLiteral	Survived	""
+src/hooks.ts	469	StringLiteral	Survived	""
+src/hooks.ts	470	ConditionalExpression	Survived	false
+src/hooks.ts	470	StringLiteral	Survived	""
+src/hooks.ts	470	StringLiteral	Survived	""
+src/hooks.ts	492	ConditionalExpression	Survived	true
+src/hooks.ts	492	EqualityOperator	Survived	argv.length >= 0
+src/hooks.ts	499	ConditionalExpression	Survived	false
+src/hooks.ts	500	StringLiteral	Survived	``
+src/hooks.ts	501	EqualityOperator	Survived	token.kind !== 'op'
+src/hooks.ts	501	ConditionalExpression	Survived	true
+src/hooks.ts	522	ConditionalExpression	Survived	false
+src/hooks.ts	590	StringLiteral	Survived	"Stryker was here!"
+src/hooks.ts	613	StringLiteral	Survived	""
+src/hooks.ts	623	ConditionalExpression	Survived	true
+src/hooks.ts	625	ArrayDeclaration	Survived	["Stryker was here"]
+src/mutation.ts	125	StringLiteral	NoCoverage	``
+src/mutation.ts	126	BlockStatement	NoCoverage	{}
+src/mutation.ts	127	StringLiteral	NoCoverage	``
+src/mutation.ts	127	LogicalOperator	NoCoverage	run.status && run.signal
+src/mutation.ts	200	StringLiteral	NoCoverage	""
+src/mutation.ts	200	StringLiteral	NoCoverage	"Stryker was here!"
+src/mutation.ts	75	StringLiteral	Survived	``
+src/mutation.ts	84	StringLiteral	Survived	""
+src/mutation.ts	94	StringLiteral	Survived	""
+src/mutation.ts	103	Regex	Survived	/v/
+src/mutation.ts	103	StringLiteral	Survived	"Stryker was here!"
+src/mutation.ts	114	StringLiteral	Survived	""
+src/mutation.ts	119	StringLiteral	Survived	""
+src/mutation.ts	122	ConditionalExpression	Survived	true
+src/mutation.ts	271	BooleanLiteral	NoCoverage	Array.isArray(evidence.files)
+src/mutation.ts	122	ConditionalExpression	Survived	false
+src/mutation.ts	122	EqualityOperator	Survived	process.platform !== 'win32'
+src/mutation.ts	126	ConditionalExpression	Survived	false
+src/mutation.ts	133	BlockStatement	Survived	{}
+src/mutation.ts	148	ConditionalExpression	Survived	false
+src/mutation.ts	134	BooleanLiteral	Survived	false
+src/mutation.ts	169	Regex	Survived	/-\s+(Approved|Reason):\s*(.*?)\s*$/i
+src/mutation.ts	169	Regex	Survived	/^-\s(Approved|Reason):\s*(.*?)\s*$/i
+src/mutation.ts	169	Regex	Survived	/^-\s+(Approved|Reason):\s(.*?)\s*$/i
+src/mutation.ts	175	Regex	Survived	/###\s+(.*?)\s*$/
+src/mutation.ts	175	Regex	Survived	/^###\s(.*?)\s*$/
+src/mutation.ts	177	StringLiteral	Survived	"Stryker was here!"
+src/mutation.ts	193	ArrayDeclaration	Survived	[]
+src/mutation.ts	194	StringLiteral	Survived	``
+src/mutation.ts	195	StringLiteral	Survived	"Stryker was here!"
+src/mutation.ts	196	StringLiteral	Survived	""
+src/mutation.ts	197	StringLiteral	Survived	""
+src/mutation.ts	198	StringLiteral	Survived	"Stryker was here!"
+src/mutation.ts	200	ConditionalExpression	Survived	true
+src/mutation.ts	200	ConditionalExpression	Survived	false
+src/mutation.ts	200	EqualityOperator	Survived	ids.length !== 0
+src/mutation.ts	203	StringLiteral	Survived	"Stryker was here!"
+src/mutation.ts	213	StringLiteral	Survived	""
+src/mutation.ts	220	StringLiteral	Survived	""
+src/mutation.ts	225	ConditionalExpression	Survived	true
+src/mutation.ts	226	StringLiteral	Survived	``
+src/mutation.ts	232	ConditionalExpression	Survived	false
+src/mutation.ts	245	ConditionalExpression	Survived	false
+src/mutation.ts	271	ConditionalExpression	Survived	false
+src/tdd.ts	44	StringLiteral	NoCoverage	"Stryker was here!"
+src/tdd.ts	84	StringLiteral	NoCoverage	"Stryker was here!"
+src/tdd.ts	140	StringLiteral	NoCoverage	""
+src/tdd.ts	141	StringLiteral	NoCoverage	""
+src/tdd.ts	143	StringLiteral	NoCoverage	""
+src/tdd.ts	143	ArrayDeclaration	NoCoverage	[]
+src/tdd.ts	143	StringLiteral	NoCoverage	""
+src/tdd.ts	143	StringLiteral	NoCoverage	""
+src/tdd.ts	143	StringLiteral	NoCoverage	""
+src/tdd.ts	143	StringLiteral	NoCoverage	``
+src/tdd.ts	143	ObjectLiteral	NoCoverage	{}
+src/tdd.ts	146	ConditionalExpression	NoCoverage	true
+src/tdd.ts	146	ConditionalExpression	NoCoverage	false
+src/tdd.ts	146	EqualityOperator	NoCoverage	process.platform !== 'win32'
+src/tdd.ts	148	BooleanLiteral	NoCoverage	fs.existsSync(outFile)
+src/tdd.ts	148	ConditionalExpression	NoCoverage	true
+src/tdd.ts	148	ConditionalExpression	NoCoverage	false
+src/tdd.ts	148	BlockStatement	NoCoverage	{}
+src/tdd.ts	149	StringLiteral	NoCoverage	""
+src/tdd.ts	152	BlockStatement	NoCoverage	{}
+src/tdd.ts	153	ObjectLiteral	NoCoverage	{}
+src/tdd.ts	153	BooleanLiteral	NoCoverage	false
+src/tdd.ts	153	BooleanLiteral	NoCoverage	false
+src/tdd.ts	49	ConditionalExpression	Survived	true
+src/tdd.ts	51	Regex	Survived	/●\sTest suite failed to run/
+src/tdd.ts	91	ConditionalExpression	Survived	true
+src/tdd.ts	91	LogicalOperator	Survived	broken.length === 0 || failed.length === 0
+src/tdd.ts	91	ConditionalExpression	Survived	true
+src/tdd.ts	91	ConditionalExpression	Survived	true
+src/tdd.ts	171	ConditionalExpression	Survived	false
+src/tdd.ts	172	ConditionalExpression	Survived	false
