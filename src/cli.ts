@@ -31,6 +31,7 @@ import {
   readMutationEvidence,
   renderEquivalents,
   runStryker,
+  strykerFileProblem,
   survivors,
   unapprovedSurvivors,
   writeMutationEvidence,
@@ -425,6 +426,12 @@ function mutateRun({ taskId, taskDir, red, green, root, sourceFiles, testFiles }
     .sort();
   if (files.length === 0) {
     console.error(`${taskId} has no task code to mutate: no source file changed between tdd red and tdd green`);
+    return 1;
+  }
+  // Moving or renaming a file changes the code tdd green saw, so the task goes back to red.
+  const fileProblem = strykerFileProblem(files);
+  if (fileProblem) {
+    console.error(`${fileProblem}, then go back with specpilot reopen ${taskId} red`);
     return 1;
   }
   const nodeProblem = nodeVersionProblem(process.versions.node);

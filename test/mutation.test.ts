@@ -70,6 +70,152 @@ describe('strykerConfig', () => {
     const config = configFor(['src/a.js'], '/tmp/out/report.json', root);
     expect(config.checkers ?? []).toEqual([]);
   });
+
+  // Stryker adds "// @ts-nocheck" to every file disableTypeChecks matches. Its default matches test/ too,
+  // fixtures included, which shifts their line numbers; only the mutated files may get it.
+  describe('disableTypeChecks', () => {
+    test('is a brace list of exactly the mutated files when there are several', () => {
+      expect(configFor(['src/a.ts', 'src/b.ts'], '/tmp/out/report.json', root).disableTypeChecks).toBe('{src/a.ts,src/b.ts}');
+    });
+
+    test('is the path itself when one file is mutated', () => {
+      expect(configFor(['src/a.ts'], '/tmp/out/report.json', root).disableTypeChecks).toBe('src/a.ts');
+    });
+
+    // Stryker turns every backslash into "/" before matching, so glob characters are escaped as
+    // character classes (like minimatch.escape with windowsPathsNoEscape), never with backslashes.
+    test('escapes glob brackets as character classes, so a Next.js-style file matches only itself', () => {
+      expect(configFor(['src/[id].ts'], '/tmp/out/report.json', root).disableTypeChecks).toBe('src/[[]id[]].ts');
+    });
+
+    test('escapes * ? ( ) as character classes', () => {
+      expect(configFor(['src/a*b.ts'], '/tmp/out/report.json', root).disableTypeChecks).toBe('src/a[*]b.ts');
+      expect(configFor(['src/q?.ts'], '/tmp/out/report.json', root).disableTypeChecks).toBe('src/q[?].ts');
+      expect(configFor(['src/(x).ts'], '/tmp/out/report.json', root).disableTypeChecks).toBe('src/[(]x[)].ts');
+    });
+
+    // A {a,b} list cannot hold a path with "{", "}" or ",": the file has to be renamed.
+    test.each([
+      ['src/a,b.ts', ['src/a,b.ts']],
+      ['src/{x}.ts', ['src/{x}.ts']],
+      ['src/x}.ts', ['src/x}.ts']],
+      ['src/a,b.ts', ['src/b.ts', 'src/a,b.ts']],
+      ['src/{x}.ts', ['src/{x}.ts', 'src/b.ts']],
+      ['src/x}.ts', ['src/b.ts', 'src/x}.ts']],
+    ])('throws, naming %s and asking to rename it, for %j', (name, files) => {
+      expect(() => configFor(files, '/tmp/out/report.json', root)).toThrow(/rename/);
+      expect(() => configFor(files, '/tmp/out/report.json', root)).toThrow(name);
+    });
+
+    // Stryker resolves the pattern with minimatch, which it depends on; skipped if it is not installed.
+    let minimatch: ((file: string, pattern: string, options: { dot: boolean }) => boolean) | null;
+    try {
+      minimatch = require('minimatch').minimatch;
+    } catch {
+      minimatch = null;
+    }
+    const withMinimatch = minimatch ? test : test.skip;
+
+    // Stryker's own step (core/dist/src/config/file-matcher.js): both the pattern and the file are
+    // resolved against the project root and their backslashes turned into "/", then matched with dot: true.
+    const norm = (s: string) => s.replace(/\\/g, '/');
+    const strykerMatches = (projectRoot: string, pattern: string, file: string) =>
+      (minimatch as NonNullable<typeof minimatch>)(
+        norm(path.resolve(projectRoot, file)),
+        norm(path.resolve(projectRoot, pattern)),
+        { dot: true },
+      );
+    const patternFor = (files: string[]) => {
+      const pattern = configFor(files, '/tmp/out/report.json', root).disableTypeChecks;
+      expect(typeof pattern).toBe('string');
+      expect(pattern as string).not.toContain('\\');
+      return pattern as string;
+    };
+    const NOT_MUTATED = ['src/i.ts', 'src/c.ts', 'test/a.test.ts', 'test/fixtures/x.ts'];
+
+    withMinimatch('matches every mutated file and no test or fixture file', () => {
+      const files = ['src/a.ts', 'src/b.ts'];
+      const pattern = patternFor(files);
+      for (const file of files) expect([file, strykerMatches(root, pattern, file)]).toEqual([file, true]);
+      for (const file of NOT_MUTATED) expect([file, strykerMatches(root, pattern, file)]).toEqual([file, false]);
+    });
+
+    test.each(['src/[id].ts', 'src/a*b.ts', 'src/(x).ts', 'src/q?.ts'])(
+      'a mutated %s matches itself, alone and in a list, and no other file',
+      (name) => {
+        if (!minimatch) return;
+        const lookalikes = ['src/axb.ts', 'src/axxb.ts', 'src/qz.ts', 'src/x.ts', 'src/d.ts'].filter((other) => other !== name);
+        for (const files of [[name], [name, 'src/b.ts'], ['src/b.ts', name]]) {
+          const pattern = patternFor(files);
+          for (const file of files) expect([files, file, strykerMatches(root, pattern, file)]).toEqual([files, file, true]);
+          for (const file of [...NOT_MUTATED, ...lookalikes]) {
+            expect([files, file, strykerMatches(root, pattern, file)]).toEqual([files, file, false]);
+          }
+        }
+      },
+    );
+  });
+
+  // Stryker matches every mutate entry on its own (core/dist/src/fs/project-reader.js) with
+  // new FileMatcher(entry, false): minimatch with dot: false, after resolving both against the project
+  // root and turning backslashes into "/". So each entry is one file, escaped with character classes.
+  describe('mutate', () => {
+    let minimatch: ((file: string, pattern: string, options: { dot: boolean }) => boolean) | null;
+    try {
+      minimatch = require('minimatch').minimatch;
+    } catch {
+      minimatch = null;
+    }
+
+    const norm = (s: string) => s.replace(/\\/g, '/');
+    const strykerMutates = (projectRoot: string, entry: string, file: string) =>
+      (minimatch as NonNullable<typeof minimatch>)(
+        norm(path.resolve(projectRoot, file)),
+        norm(path.resolve(projectRoot, entry)),
+        { dot: false },
+      );
+    const mutateFor = (files: string[]) => configFor(files, '/tmp/out/report.json', root).mutate as string[];
+
+    test('escapes * ? ( ) [ ] in each entry as character classes, without braces or backslashes', () => {
+      expect(mutateFor(['src/[id].ts'])).toEqual(['src/[[]id[]].ts']);
+      expect(mutateFor(['src/a*b.ts', 'src/q?.ts', 'src/(x).ts'])).toEqual(['src/a[*]b.ts', 'src/q[?].ts', 'src/[(]x[)].ts']);
+      expect(mutateFor(['src/b.ts', 'src/v1.2/[id].ts'])).toEqual(['src/b.ts', 'src/v1.2/[[]id[]].ts']);
+    });
+
+    test.each([
+      ['src/[id].ts', 'src/[[]id[]].ts'],
+      ['src/a*b.ts', 'src/a[*]b.ts'],
+      ['src/(x).ts', 'src/[(]x[)].ts'],
+      ['src/q?.ts', 'src/q[?].ts'],
+    ])(
+      'the entry for %s is %s and makes Stryker mutate exactly that file and no lookalike',
+      (name, escaped) => {
+        const lookalikes = ['src/i.ts', 'src/d.ts', 'src/axb.ts', 'src/qz.ts', 'src/x.ts', 'src/b.ts'].filter((other) => other !== name);
+        const files = [name, 'src/b.ts'];
+        const entries = mutateFor(files);
+        expect(entries).toEqual([escaped, 'src/b.ts']);
+        if (!minimatch) return;
+        for (const entry of entries) {
+          expect(entry).not.toContain('\\');
+          expect(entry).not.toMatch(/[{}]/);
+        }
+        expect([entries[0], name, strykerMutates(root, entries[0], name)]).toEqual([entries[0], name, true]);
+        for (const file of lookalikes) {
+          expect([entries[0], file, strykerMutates(root, entries[0], file)]).toEqual([entries[0], file, false]);
+        }
+      },
+    );
+
+    // Stryker never lists files under a folder whose name starts with ".", so it would mutate nothing there.
+    test.each([
+      ['src/.internal/x.ts', ['src/.internal/x.ts']],
+      ['.config/a.ts', ['.config/a.ts']],
+      ['src/.x/a.js', ['src/b.ts', 'src/.x/a.js']],
+    ])('throws, naming %s and saying Stryker skips hidden folders, for %j', (name, files) => {
+      expect(() => configFor(files, '/tmp/out/report.json', root)).toThrow(/hidden/);
+      expect(() => configFor(files, '/tmp/out/report.json', root)).toThrow(name);
+    });
+  });
 });
 
 describe('nodeVersionProblem', () => {

@@ -123,7 +123,7 @@ The `red` gate needs `red.json` with the tests unchanged since; the `green` gate
 
 In the `mutation` phase the tests have to prove they catch bugs:
 
-- **`specpilot mutate <task>`** runs [Stryker](https://stryker-mutator.io/) over the source files the task changed between `red.json` and `green.json`, plus every file mutated in an earlier round, so the set only grows after a reopen. Code and tests must be byte for byte the green version. The project needs `npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker`; SpecPilot generates the Stryker config (Jest runner, plus the TypeScript checker when the project has a `tsconfig.json`, so a mutant that does not compile is not counted as caught). The result goes to `mutation.json`. If Stryker exits with an error, nothing is recorded. Stryker's `.stryker-tmp/` and `reports/` folders are never hashed as code or tests.
+- **`specpilot mutate <task>`** runs [Stryker](https://stryker-mutator.io/) over the source files the task changed between `red.json` and `green.json`, plus every file mutated in an earlier round, so the set only grows after a reopen. Code and tests must be byte for byte the green version. The project needs `npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker`; SpecPilot generates the Stryker config (Jest runner, plus the TypeScript checker when the project has a `tsconfig.json`, so a mutant that does not compile is not counted as caught). Only the mutated files get Stryker's `// @ts-nocheck`, so test fixtures keep their line numbers. The result goes to `mutation.json`. If Stryker exits with an error, nothing is recorded. Stryker's `.stryker-tmp/` and `reports/` folders are never hashed as code or tests.
 - Every mutant that is not killed (`Survived`, `NoCoverage`, `Pending`, `RuntimeError`, or `Ignored` by a `// Stryker disable` comment) is listed in `specs/<task>/equivalents.md`, with an id made of `file:line mutator mutated-code`. Only the human can accept one as equivalent, by writing `- Approved: yes` and a `- Reason:` under its id. Approvals are kept when `mutate` runs again, as long as the id still matches exactly. Any other survivor is a test gap: `specpilot reopen <task> red`.
 - **`specpilot mutate bug <task> AC-n`**: the code agent injects one targeted bug for the criterion and runs this command. The bug counts as caught only if a test with `AC-n` in its name fails on an assertion and no suite fails to run (so a bug that does not compile is not caught). Then the code agent removes the bug. A missed bug is a test gap, just like a surviving mutant: a later bug that is caught does not hide it, and the task goes back with `specpilot reopen <task> red`.
 
@@ -131,8 +131,16 @@ The `mutation` gate passes only when Stryker ran over the current code and tests
 
 Known limitation: SpecPilot's own CLI tests run the compiled `dist/cli.js`, which Stryker does not mutate, so mutants in the CLI code survive even when a CLI test covers that behaviour. Those survivors are real test gaps (they need unit tests that import `src/`) and are never approved as equivalents. Target projects whose tests import `src/` directly are not affected.
 
-Known bug (pending): the generated Stryker config keeps Stryker's default `disableTypeChecks`. That adds `// @ts-nocheck` at the top of every `.ts`/`.js` file in the sandbox, test fixtures included, so tests that depend on line numbers inside fixtures fail in Stryker's initial test run.
+`specpilot mutate` escapes glob characters (`* ? ( ) [ ]`) in the file paths it gives Stryker, so a file like `src/[id].ts` is mutated and gets `// @ts-nocheck`, and nothing else does. A task file whose path has `{`, `}` or `,`, or a segment starting with `.`, stops `mutate` with a message to rename or move it and go back with `specpilot reopen <task> red`.
 
+Known limits of the files `mutate` passes to Stryker:
+
+- A task file at the project root whose name starts with `!` is never mutated: Stryker reads the entry as an exclude.
+- A task file whose path ends in `:N-M` or `:N:C-M:C` is read by Stryker as a line range of another file.
+- `mutate` does not check that every task file appears in Stryker's report, so a file Stryker skipped passes silently with 0 mutants.
+- A project root with `[`, `]`, `{`, `}` or `,` in its path makes Stryker match no file at all, because Stryker does not escape the root.
+- On POSIX, a backslash in a file name is turned into `/` by Stryker, so the entry can also match another file.
+- Stryker always ignores `node_modules` (in any letter case) and symlinked files, and SpecPilot never hashes code under `dist/`, `build/`, `coverage/`, `reports/` or symlinks, so task code there is never mutated.
 ```bash
 npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
 npx specpilot ledger check TASK-101              # check every citation in the grill ledger

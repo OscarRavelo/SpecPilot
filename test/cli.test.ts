@@ -936,6 +936,45 @@ describe('specpilot mutate', () => {
       expect(strykerCalls()[0].checkers ?? []).toEqual([]);
     });
 
+    // disableTypeChecks lists the mutated files in a {a,b} glob, which cannot hold a "," "{" or "}".
+    test('a changed file with a comma in its path stops mutate before Stryker starts and asks to rename it', () => {
+      fs.rmSync(file('src/a.js'));
+      fs.writeFileSync(file('src/a,b.js'), A_GREEN);
+      writeEvidence('red', { 'src/a,b.js': A_RED, 'src/b.js': B_GREEN });
+      writeEvidence('green', { 'src/a,b.js': A_GREEN, 'src/b.js': B_GREEN });
+      strykerReports({ 'src/a,b.js': [strykerMutant(1, 'x - 1', 'Killed')] });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(fs.existsSync(file('stryker-calls.json'))).toBe(false);
+      expect(result.status).toBe(1);
+      expect(result.stderr.endsWith('\n')).toBe(true);
+      expect(result.stderr.trimEnd().split('\n')).toHaveLength(1);
+      expect(result.stderr).toContain('src/a,b.js');
+      expect(result.stderr).toMatch(/rename/);
+      expect(result.stderr).toContain('specpilot reopen TASK-101 red');
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
+    // Stryker never lists files under a folder whose name starts with ".", so it would mutate nothing there.
+    test('a changed file in a hidden folder stops mutate before Stryker starts and says how to continue', () => {
+      fs.rmSync(file('src/a.js'));
+      fs.mkdirSync(file('src/.x'));
+      fs.writeFileSync(file('src/.x/a.js'), A_GREEN);
+      writeEvidence('red', { 'src/.x/a.js': A_RED, 'src/b.js': B_GREEN });
+      writeEvidence('green', { 'src/.x/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      strykerReports({ 'src/.x/a.js': [strykerMutant(1, 'x - 1', 'Killed')] });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(fs.existsSync(file('stryker-calls.json'))).toBe(false);
+      expect(result.status).toBe(1);
+      expect(result.stderr.endsWith('\n')).toBe(true);
+      expect(result.stderr.trimEnd().split('\n')).toHaveLength(1);
+      expect(result.stderr).toContain('src/.x/a.js');
+      expect(result.stderr).toMatch(/hidden/);
+      expect(result.stderr).toContain('specpilot reopen TASK-101 red');
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
     test('a Stryker run that writes no report exits 1 without a stack trace', () => {
       writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_GREEN });
       writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
@@ -1117,6 +1156,66 @@ describe('specpilot mutate', () => {
         const kept = fs.readFileSync(equivalentsFile, 'utf8');
         expect(kept).toContain(`### ${SURVIVOR}\n- Approved: yes\n- Reason: zero is out of scope`);
         expect(fs.existsSync(file('.stryker-tmp'))).toBe(false);
+      },
+      240_000,
+    );
+  });
+
+  // Stryker adds "// @ts-nocheck" to the files disableTypeChecks matches. A test that reads a fixture under
+  // test/ breaks in Stryker's initial test run if the fixture gets that line too, so only mutated files may.
+  describe('mutate, with real Stryker and a test that reads a fixture', () => {
+    const DOUBLE_RED = 'exports.double = () => 0;\n';
+    const DOUBLE = 'exports.double = (n) => n * 2;\n';
+    const FIXTURE = "module.exports = 'first line of the fixture';\n";
+    const DOUBLE_TEST = [
+      "const fs = require('fs');",
+      "const path = require('path');",
+      "const { double } = require('../src/double');",
+      "test('AC-1 two doubled is four', () => { expect(double(2)).toBe(4); });",
+      "test('AC-2 the fixture starts with its own first line', () => {",
+      "  const text = fs.readFileSync(path.join(__dirname, 'fixtures', 'data.js'), 'utf8');",
+      "  expect(text.split('\\n')[0]).toBe(\"module.exports = 'first line of the fixture';\");",
+      '});',
+      '',
+    ].join('\n');
+    const evidence = (code: string) => ({
+      taskId: 'TASK-101',
+      at: '2026-10-18T10:00:00.000Z',
+      tests: [],
+      testFiles: { 'test/double.test.js': sha256(DOUBLE_TEST), 'test/fixtures/data.js': sha256(FIXTURE) },
+      sourceFiles: { 'src/double.js': sha256(code) },
+    });
+
+    beforeEach(() => {
+      fs.symlinkSync(NODE_MODULES, file('node_modules'));
+      fs.mkdirSync(file('src'));
+      fs.mkdirSync(file('test/fixtures'), { recursive: true });
+      fs.mkdirSync(file('specs/TASK-101'), { recursive: true });
+      fs.copyFileSync(path.join(SPECS, 'valid.md'), file('specs/TASK-101/spec.md'));
+      fs.writeFileSync(file('src/double.js'), DOUBLE);
+      fs.writeFileSync(file('test/double.test.js'), DOUBLE_TEST);
+      fs.writeFileSync(file('test/fixtures/data.js'), FIXTURE);
+      fs.writeFileSync(file('specs/TASK-101/red.json'), JSON.stringify(evidence(DOUBLE_RED)));
+      fs.writeFileSync(file('specs/TASK-101/green.json'), JSON.stringify(evidence(DOUBLE)));
+      writeState('mutation');
+    });
+
+    test(
+      'the fixture keeps its line numbers in Stryker\'s sandbox, so the initial test run passes and mutate writes mutation.json',
+      () => {
+        const result = runIn(project, 'mutate', 'TASK-101');
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(output).not.toContain('failed tests in the initial test run');
+        expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(true);
+        const { mutants } = mutation();
+        expect(mutants.length).toBeGreaterThan(0);
+        if (result.status !== 0) {
+          expect(result.status).toBe(1);
+          // Exit 1 is fine only because of surviving mutants, each listed by its id.
+          expect(result.stderr).toMatch(/✕ src\/double\.js:\d+ /);
+        }
+        // The fixture in the project itself is never touched.
+        expect(fs.readFileSync(file('test/fixtures/data.js'), 'utf8')).toBe(FIXTURE);
       },
       240_000,
     );

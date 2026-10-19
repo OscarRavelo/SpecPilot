@@ -75,10 +75,43 @@ export function mutantId(file: string, line: number, mutator: string, replacemen
   return code ? `${file}:${line} ${mutator} ${code}` : `${file}:${line} ${mutator}`;
 }
 
+// A glob matching exactly one file. Stryker turns every backslash in the pattern into "/" before
+// matching, so glob characters are escaped as character classes ("[*]", "[[]") instead. "!" needs no
+// escape: it is only special at the start of the pattern, which Stryker resolves to an absolute path.
+const exactFileGlob = (file: string) => file.replace(/[*?()[\]]/g, '[$&]');
+
+// A glob matching exactly the given files; several files become a {a,b} list.
+function exactGlob(files: string[]): string {
+  const escaped = files.map(exactFileGlob);
+  return escaped.length === 1 ? escaped[0] : `{${escaped.join(',')}}`;
+}
+
+// Why Stryker cannot mutate one of the given files, or null if it can mutate them all. "{", "}" and ","
+// cannot be escaped inside a {a,b} list, so a file with them in its path has to be renamed. Stryker
+// matches mutate entries with dot: false and never lists hidden files or folders, so it would mutate
+// nothing under a path segment that starts with ".".
+export function strykerFileProblem(files: string[]): string | null {
+  const unmatchable = files.find((file) => /[{},]/.test(file));
+  if (unmatchable !== undefined) {
+    return `${unmatchable} cannot be matched exactly by a Stryker glob: rename it without "{", "}" or ","`;
+  }
+  const hidden = files.find((file) => file.split('/').some((segment) => segment.startsWith('.')));
+  if (hidden !== undefined) {
+    return `${hidden} is hidden (a path segment starts with "."), and Stryker skips hidden files and folders: move or rename it`;
+  }
+  return null;
+}
+
 // The TypeScript checker needs a tsconfig.json; a plain-JS project gets no checker.
 export function strykerConfig(files: string[], reportFile: string, root: string): Record<string, unknown> {
+  const problem = strykerFileProblem(files);
+  if (problem) throw new Error(problem);
   return {
-    mutate: files,
+    // Stryker matches each entry on its own as a glob, so each one is escaped to match only its file.
+    mutate: files.map(exactFileGlob),
+    // Stryker adds // @ts-nocheck to every file this matches. Its default matches test/ too, which
+    // shifts the line numbers of fixtures that tests read; only the mutated files may get it.
+    disableTypeChecks: exactGlob(files),
     testRunner: 'jest',
     checkers: fs.existsSync(path.join(root, 'tsconfig.json')) ? ['typescript'] : [],
     reporters: ['json', 'clear-text'],
