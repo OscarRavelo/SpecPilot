@@ -98,6 +98,13 @@ function installed(root: string, name: string): boolean {
   }
 }
 
+// Stryker needs Node >= 22; returns why the given version is too old, or null if it is fine.
+export function nodeVersionProblem(version: string): string | null {
+  const major = Number.parseInt(version.replace(/^v/, ''), 10);
+  if (major >= 22) return null;
+  return `Stryker needs Node >= 22, but this is Node ${version}: upgrade Node and run specpilot mutate again`;
+}
+
 // Runs Stryker over the given files and returns its parsed JSON report. Stryker's own output (the
 // clear-text table of survivors) goes straight to the terminal.
 export function runStryker(root: string, files: string[]): unknown {
@@ -206,13 +213,13 @@ export function unapprovedSurvivors(mutants: Mutant[], equivalents: Equivalent[]
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // A targeted bug is caught only if every suite ran (a bug that does not compile proves nothing) and a
-// test with the AC in its name, as a whole id, fails on an assertion. AC-1 is not AC-12, AC-1.2, AC-1-x
+// test with the AC in its name, as a whole id, fails on an assertion. AC-1 is not AC-12, AC-1x, AC-1.2, AC-1-x
 // or XAC-1, but a sentence may end right after it ("adds AC-1.").
 export function bugProblems(report: JestReport, acId: string, root: string): string[] {
   const broken = brokenSuites(report, root);
   if (broken.length > 0) return [...broken, 'A suite that fails to run does not catch a bug'];
 
-  const named = new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(acId)}(?![0-9]|[.-][A-Za-z0-9])`);
+  const named = new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(acId)}(?![A-Za-z0-9]|[.-][A-Za-z0-9])`);
   const caught = report.testResults
     .flatMap((suite) => suite.assertionResults)
     .some((test) => test.status === 'failed' && named.test(test.fullName) && failsOnAssertion(test));

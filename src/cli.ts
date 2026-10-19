@@ -25,6 +25,7 @@ import {
 import {
   bugProblems,
   missingSourceHashes,
+  nodeVersionProblem,
   parseEquivalents,
   parseStrykerReport,
   readMutationEvidence,
@@ -424,6 +425,11 @@ function mutateRun({ taskId, taskDir, red, green, root, sourceFiles, testFiles }
     .sort();
   if (files.length === 0) {
     console.error(`${taskId} has no task code to mutate: no source file changed between tdd red and tdd green`);
+    return 1;
+  }
+  const nodeProblem = nodeVersionProblem(process.versions.node);
+  if (nodeProblem) {
+    console.error(nodeProblem);
     return 1;
   }
 

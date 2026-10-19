@@ -452,14 +452,382 @@ describe('checkToolUse with agent roles', () => {
       expect(withRoles(bash('echo x > src/a.ts'))).toEqual(ONLY_CODE_AGENT('src/a.ts'));
     });
 
-    test('code-agent may edit source code from the shell but not delete a test', () => {
-      expect(withRoles(bash("sed -i '' 's/a/b/' src/a.ts", 'code-agent'))).toEqual(ALLOWED);
-      expect(withRoles(bash('rm test/a.test.ts', 'code-agent'))).toEqual(ONLY_TESTS_AGENT('test/a.test.ts'));
+    // tests-agent and code-agent write files only with Edit/Write: in Bash, every simple command must be
+    // on the allowlist with known read-only options, and redirections may only go to /dev/null or a descriptor.
+    const WRITING_AGENTS = ['tests-agent', 'code-agent'];
+
+    const expectBashWriteDenied = (command: string, agentType: string) => {
+      const decision = withRoles(bash(command, agentType));
+      expect({ command, allow: decision.allow }).toEqual({ command, allow: false });
+      expect(decision.reason).toContain(`Blocked by SpecPilot: ${agentType} may not run this command from Bash (`);
+      expect(decision.reason).toContain(
+        '). Only allowlisted read-only commands may run; write files with Edit or Write. Allowed in Bash: ',
+      );
+      expect(decision.reason).not.toContain('may not write files');
+    };
+
+    describe.each(WRITING_AGENTS.map((agent) => [agent]))('%s', (agentType) => {
+      test.each([
+        // Writes, including inside the agent's own area.
+        ["sed -i 's/a/b/' src/x.ts"],
+        ["sed -i '' 's/a/b/' src/a.ts"],
+        ["sed -n '1,5p' src/a.ts"],
+        ["awk '{ print }' src/a.ts"],
+        ['echo x > test/a.test.ts'],
+        ['echo x > src/a.ts'],
+        ['echo x > out.txt'],
+        ['echo x >> out.txt'],
+        ['npm test 2> err.log'],
+        ['npm test &> all.log'],
+        ['npm test 2>&1 | tee out.log'],
+        ['tee src/a.ts'],
+        ['cp a.ts src/b.ts'],
+        ['mv src/a.ts src/b.ts'],
+        ['rm test/a.test.ts'],
+        ['rm -f out.txt'],
+        ['touch src/a.ts'],
+        ['mkdir test/fixtures/new'],
+        ['chmod +x dist/cli.js'],
+        // Programs that can write anything.
+        [`node -e "require('fs').writeFileSync('src/a.ts', '')"`],
+        ['node -e "x"'],
+        [`python -c "open('test/a.test.ts', 'w')"`],
+        [`python3 -c "print(1)"`],
+        ["perl -i -pe 's/a/b/' src/a.ts"],
+        ["perl -ne 'print' src/a.ts"],
+        // Shell constructs the hook cannot see through.
+        ["cat > src/a.ts <<'EOF'\nconst a = 1;\nEOF"],
+        ["cat <<'EOF'\nhello\nEOF"],
+        ['echo $(rm src/a.ts)'],
+        ['echo `rm src/a.ts`'],
+        ['diff <(ls src) <(ls test)'],
+        ['eval "rm src/a.ts"'],
+        ['exec rm src/a.ts'],
+        ['source script.sh'],
+        ['frobnicate src/a.ts'],
+        ['npm test && frobnicate'],
+        ['echo "unterminated > src/a.ts'],
+        // Options that write or execute on allowed programs.
+        ['git diff --output=x'],
+        ['git log -o x'],
+        ['git diff --ext-diff'],
+        ['git diff --textconv'],
+        ['git -c core.pager=x log'],
+        ['git -C sub status'],
+        ['npx jest --outputFile=x'],
+        ['npm test -- --outputFile=x'],
+        ['npm test -- --coverage'],
+        ['npx jest -u'],
+        ['npx jest --updateSnapshot'],
+        ['npx jest --coverage'],
+        ['npx jest --config x'],
+        ['npx jest --watch'],
+        ['rg --pre x pat'],
+        ['npx tsc'],
+        ['npx tsc -p tsconfig.json'],
+        ['npx tsc --noEmit --outDir x'],
+        ['npx tsc --build'],
+        ['find . -delete'],
+        ['find . -exec rm {} \\;'],
+        ['find . -name "*.ts" -fprint out.txt'],
+        ['npx --yes jest'],
+        ['npx -p cowsay cowsay hi'],
+        ['grep --unknown-flag x'],
+        ['grep -rnZ x src'],
+        ['tail -f out.log'],
+        ['npm install'],
+        ['npm run lint'],
+        // ">&" followed by a word that is not a number or "-" writes a file.
+        ['echo hi >&out.txt'],
+        // The tokenizer must not lose track of quotes; an unterminated quote fails closed.
+        ['echo "\\" " > out.txt " "'],
+        ['echo "\\" ; echo "'],
+        // $'...' and $"..." are expanded by the shell.
+        ["git diff $'\\x2d\\x2doutput=out.txt'"],
+        ['echo $"x"'],
+        // An option value given as the next word may not be another option.
+        ['git diff -U --output=out.txt'],
+        ['git log -U --output=out.txt'],
+        ['git diff -U 5'],
+        ['git log --pretty --output=out.txt'],
+        ['git log --pretty oneline'],
+        ['git log --format --output=out.txt'],
+        ['npx tsc --noEmit --pretty --generateTrace d'],
+        ['npx jest -t --outputFile=r.json --json'],
+        ['npm test -- --testNamePattern --outputFile=r.json --json'],
+        // --noEmit takes no value.
+        ['npx tsc --noEmit false -p tsconfig.json'],
+        // Every VAR=value prefix is blocked.
+        ['NODE_OPTIONS=--require=./x.js npm test'],
+        ['GIT_EXTERNAL_DIFF=x git diff'],
+        ['RIPGREP_CONFIG_PATH=x rg y'],
+        ['CI=1 npm test'],
+        ['FOO=1 npm test'],
+        // cd is always blocked.
+        ['cd sub && npm test'],
+        ['cd .'],
+        ['cd test/fixtures/p && npx jest'],
+        // Every separator still checks every command.
+        ['npm test || rm x'],
+        ['npm test & rm x'],
+        ['npm test |& rm x'],
+        ['npm test\nrm x'],
+        // specpilot commands that neither agent may run.
+        ['npx specpilot gate T'],
+        ['npx specpilot reopen T red'],
+        ['npx specpilot spec lint x'],
+        ['npx specpilot hook pre-tool-use'],
+        ['node dist/cli.js gate T'],
+        ['node dist/cli.js reopen T red'],
+        ['node dist/cli.js spec lint x'],
+        ['node dist/cli.js hook pre-tool-use'],
+      ])('%j is blocked', (command) => {
+        expectBashWriteDenied(command, agentType);
+      });
+
+      test.each([
+        ['npm test'],
+        ['npm run typecheck'],
+        ['npm run build'],
+        ['npx jest x'],
+        ['npx jest -t "AC-1" test/x.test.ts'],
+        ["npx jest -t 'AC-1' test/x.test.ts"],
+        ['npm test -- -t "AC-1"'],
+        ['npx tsc --noEmit -p tsconfig.json'],
+        ['cat src/a.ts | grep x'],
+        ['ls test | wc -l'],
+        ['ls -la src'],
+        ['git diff --stat'],
+        ['git diff | head -20'],
+        ['git log --oneline -5'],
+        ['git status -s'],
+        ['grep -rn x src'],
+        ["rg -n -g '*.ts' x"],
+        ["find . -name '*.ts' -type f"],
+        ['npm test 2>&1 | tail -5'],
+        ['ls >/dev/null'],
+        ['npm test > /dev/null 2>&1'],
+        ['echo done >&2'],
+        ['echo x >&2'],
+        ['echo x >&-'],
+        ['npm test 2>&1'],
+        ['npx specpilot status'],
+        ['node dist/cli.js status'],
+        ['pwd; echo hi'],
+        ['git diff -U5'],
+        ['git log --pretty=oneline'],
+        ['git log --format=%h'],
+        ['git diff -- --odd-path'],
+      ])('%j is allowed', (command) => {
+        expect(withRoles(bash(command, agentType))).toEqual(ALLOWED);
+      });
+
+      // Any backslash outside quotes is blocked: a backslash-newline continuation could otherwise hide an
+      // option inside a word that does not start with "-".
+      test.each([
+        ['find . \\\n-delete'],
+        ['find . \\\n-fprint out.txt'],
+        ["find . \\\n-exec node test/x.js '{}' ';'"],
+        ['rg \\\n--pre=sh x'],
+        ['git diff \\\n--output=f'],
+        ['npx jest \\\n--config=x.js'],
+        ['echo a\\ b'],
+        ['grep x src\\/a.ts'],
+      ])('%j with a backslash outside quotes is blocked', (command) => {
+        expectBashWriteDenied(command, agentType);
+      });
+
+      // Any unquoted glob character (*, ? or [) is blocked: the shell expands it into words the hook never sees.
+      test.each([
+        ['find . [-]delete'],
+        ['find . ?delete'],
+        ['ls src/*.ts'],
+        ['cat test/a?.ts'],
+        ['grep x *'],
+      ])('%j with an unquoted glob is blocked', (command) => {
+        expectBashWriteDenied(command, agentType);
+      });
+
+      test.each([
+        ["rg -g '*.ts' x"],
+        ["find . -name '*.ts' -type f"],
+        ["grep -rn 'a[bc]' src"],
+        ['npx jest -t "AC-1" test/x.test.ts'],
+      ])('%j with a quoted glob is allowed', (command) => {
+        expect(withRoles(bash(command, agentType))).toEqual(ALLOWED);
+      });
+
+      // The core loop keeps working.
+      test.each([
+        ['npm test'],
+        ['npm test 2>&1 | tail -30'],
+        ['npx jest test/x.test.ts'],
+        ['npm run typecheck'],
+        ['npm run build'],
+      ])('core loop command %j is allowed', (command) => {
+        expect(withRoles(bash(command, agentType))).toEqual(ALLOWED);
+      });
+
+      // "<>" opens a file for writing and ">|" overwrites one even with noclobber.
+      test.each([['echo x <>file'], ['echo x >|file'], ['cat <>out.txt'], ['ls >|out.txt']])(
+        '%j is blocked',
+        (command) => {
+          expectBashWriteDenied(command, agentType);
+        },
+      );
+
+      // Round-2 decisions: double-quote backslashes, tsc arguments, specpilot argument formats, diff -U, and
+      // a value option at the end of the command.
+      test.each([
+        ['echo "a\\"b"'],
+        ['grep -n "a\\|b" src'],
+        ['npx tsc --noEmit src/a.ts'],
+        ['npx tsc --noEmit false'],
+        ['npx tsc -- src/a.ts'],
+        ['npx tsc --noEmit -- x'],
+        ['npx specpilot mutate bug T AC-x'],
+        ['npx specpilot mutate bug T ac-1'],
+        ['npx specpilot mutate bug'],
+        ['npx specpilot status extra'],
+        ['node dist/cli.js mutate bug T AC-x'],
+        ['node dist/cli.js mutate bug T ac-1'],
+        ['node dist/cli.js mutate bug'],
+        ['node dist/cli.js status extra'],
+        ['diff -U 3 a b'],
+        ['grep -e'],
+        ['rg -g'],
+      ])('round-2 decision: %j is blocked', (command) => {
+        expectBashWriteDenied(command, agentType);
+      });
+
+      test.each([
+        ["grep -nE 'a|b' src"],
+        ['npx tsc src/a.ts --noEmit'],
+        ['npx tsc --noEmit -p tsconfig.json'],
+        ['diff -U3 a b'],
+      ])('round-2 decision: %j is allowed', (command) => {
+        expect(withRoles(bash(command, agentType))).toEqual(ALLOWED);
+      });
     });
 
-    test('tests-agent may write a test from the shell but not source code', () => {
-      expect(withRoles(bash('echo x > test/a.test.ts', 'tests-agent'))).toEqual(ALLOWED);
-      expect(withRoles(bash('echo x > src/a.ts', 'tests-agent'))).toEqual(ONLY_CODE_AGENT('src/a.ts'));
+    // Words that are not task ids, through npx and through dist/cli.js.
+    const SPECPILOT_PREFIXES = ['npx specpilot', 'node dist/cli.js'];
+    const NOT_TASK_IDS = ['bug', '.x', '-x', 'x/y'];
+    describe.each<[string, (task: string) => string]>([
+      ['tests-agent', (task) => `tdd red ${task}`],
+      ['code-agent', (task) => `mutate bug ${task} AC-1`],
+    ])('task ids for %s', (agentType, subcommand) => {
+      test.each(SPECPILOT_PREFIXES.flatMap((prefix) => NOT_TASK_IDS.map((task) => [`${prefix} ${subcommand(task)}`])))(
+        '%j is blocked',
+        (command) => {
+          expectBashWriteDenied(command, agentType);
+        },
+      );
+
+      test.each(SPECPILOT_PREFIXES.map((prefix) => [`${prefix} ${subcommand('TASK-101')}`]))('%j is allowed', (command) => {
+        expect(withRoles(bash(command, agentType))).toEqual(ALLOWED);
+      });
+    });
+
+    // Which specpilot commands each agent may run, through npx or through dist/cli.js.
+    const SPECPILOT = ['npx specpilot', 'node dist/cli.js'];
+    const SPECPILOT_ROLES: [string, string[], string[]][] = [
+      [
+        'tests-agent',
+        ['status', 'tdd red T'],
+        ['tdd green T', 'mutate T', 'mutate bug T AC-1', 'tdd red', 'gate T', 'reopen T red'],
+      ],
+      [
+        'code-agent',
+        ['status', 'tdd green T', 'mutate T', 'mutate bug T AC-1'],
+        ['tdd red T', 'tdd green', 'mutate', 'gate T', 'reopen T red', 'spec lint x'],
+      ],
+    ];
+
+    describe.each(SPECPILOT_ROLES)('specpilot for %s', (agentType, allowed, blocked) => {
+      const commands = (subcommands: string[]) =>
+        SPECPILOT.flatMap((prefix) => subcommands.map((subcommand) => [`${prefix} ${subcommand}`]));
+
+      test.each(commands(allowed))('%j is allowed', (command) => {
+        expect(withRoles(bash(command, agentType))).toEqual(ALLOWED);
+      });
+
+      test.each(commands(blocked))('%j is blocked', (command) => {
+        expectBashWriteDenied(command, agentType);
+      });
+
+      test('node dist/cli.js gets exactly the same verdict as npx specpilot', () => {
+        for (const subcommand of [...allowed, ...blocked, 'tdd red bug', 'mutate bug x/y AC-1', 'status extra']) {
+          expect({ subcommand, verdict: withRoles(bash(`node dist/cli.js ${subcommand}`, agentType)) }).toEqual({
+            subcommand,
+            verdict: withRoles(bash(`npx specpilot ${subcommand}`, agentType)),
+          });
+        }
+      });
+    });
+
+    test('the exact deny message starts with the agent and ends with what Bash allows', () => {
+      const decision = withRoles(bash("sed -i 's/a/b/' src/x.ts", 'code-agent'));
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toMatch(
+        /^Blocked by SpecPilot: code-agent may not run this command from Bash \(.+\)\. Only allowlisted read-only commands may run; write files with Edit or Write\. Allowed in Bash: .+/s,
+      );
+    });
+
+    test.each(WRITING_AGENTS)('a read-only command off the allowlist is not described as a write for %s', (agentType) => {
+      const decision = withRoles(bash('git -C sub status', agentType));
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toMatch(
+        new RegExp(
+          `^Blocked by SpecPilot: ${agentType} may not run this command from Bash \\(.+\\)\\. ` +
+            'Only allowlisted read-only commands may run; write files with Edit or Write\\. Allowed in Bash: .+',
+          's',
+        ),
+      );
+      expect(decision.reason).not.toContain('may not write files');
+    });
+
+    test('a write from Bash is blocked before the role rule, even outside the agent area', () => {
+      expectBashWriteDenied('rm test/a.test.ts', 'code-agent');
+      expectBashWriteDenied('echo x > src/a.ts', 'tests-agent');
+    });
+
+    describe.each<[string, string | undefined]>([
+      ['the main session', undefined],
+      ['another agent', 'Explore'],
+    ])('%s keeps the file-based rules', (_, agentType) => {
+      test.each([
+        'npm test',
+        'cat a | grep b',
+        'node -e "x"',
+        'frobnicate x',
+        'echo x > NOTES.md',
+        'FOO=1 npm test',
+        'cd sub && npm test',
+        'npx specpilot gate T',
+        'node dist/cli.js reopen T red',
+        'ls src/*.ts',
+        'echo a\\ b',
+        'grep x *',
+        'find . \\\n-name x',
+      ])(
+        '%j is still allowed',
+        (command) => {
+          expect(withRoles(bash(command, agentType))).toEqual(ALLOWED);
+        },
+      );
+
+      test('sed -i on source code is still blocked by the role rule', () => {
+        expect(withRoles(bash('sed -i s/a/b/ src/x.ts', agentType))).toEqual(ONLY_CODE_AGENT('src/x.ts'));
+      });
+    });
+
+    test('without roles tests-agent and code-agent may still use any Bash command', () => {
+      for (const agentType of WRITING_AGENTS) {
+        expect(checkToolUse(bash('node -e "x"', agentType), root, undefined, false)).toEqual(ALLOWED);
+        expect(checkToolUse(bash('frobnicate x', agentType), root)).toEqual(ALLOWED);
+        expect(checkToolUse(bash("sed -i '' 's/a/b/' src/a.ts", agentType), root, undefined, false)).toEqual(ALLOWED);
+      }
     });
   });
 

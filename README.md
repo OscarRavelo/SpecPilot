@@ -99,6 +99,17 @@ Test files are `*.test.*` / `*.spec.*` and anything under `test/`, `tests/` or `
 
 With `--roles` (`specpilot hook pre-tool-use --roles`), the hook also enforces agent roles by the `agent_type` Claude Code passes for subagents: test files may only be edited by `tests-agent`, source code only by `code-agent`, those two agents may edit nothing else, and the main session and other agents may not edit tests or source code at all. Both the role and the phase must allow an edit. Roles are off by default, so a project without these two agents keeps working.
 
+With `--roles`, `tests-agent` and `code-agent` may write files only with Edit or Write, never from Bash. For them a Bash command runs only if every part of it is on an allowlist of read-only commands, each with its own list of read-only options: `cat`, `head`, `tail`, `ls`, `wc`, `diff`, `grep`, `rg`, `find`, `echo`, `printf`, `pwd`, `true`, `which`, read-only `git` subcommands, `npm test`, `npm run typecheck`, `npm run build`, `npx jest` and `npx tsc --noEmit`. Each agent can also run only its own `specpilot` commands: `tests-agent` gets `status` and `tdd red <task>`; `code-agent` gets `status`, `tdd green <task>`, `mutate <task>` and `mutate bug <task> AC-n`. `gate` and `reopen` are left to the main session and the human. Anything the hook cannot classify is blocked: unknown programs or options, write redirections (only `/dev/null` and descriptor copies such as `2>&1` are allowed), `VAR=value` prefixes, `cd`, heredocs, `$(…)`, backticks, variable expansion, `$'…'`, unquoted backslashes and globs, `eval`/`exec`/`source` and unterminated quotes. The message reads `Blocked by SpecPilot: <agent> may not run this command from Bash (<reason>). Only allowlisted read-only commands may run; write files with Edit or Write. Allowed in Bash: …`. The main session and other agents keep the target-based Bash check described above.
+
+Known limits of the Bash allowlist:
+
+- `npm test`, `npx jest` and `specpilot tdd red|green` run code the agents wrote with Edit/Write. A test or source file can call `fs.writeFileSync` or `child_process`, and the allowlist does not limit what that code does.
+- The hook runs from `dist/cli.js`, which is built from `src/`. `code-agent` could weaken `src/hooks.ts` and rebuild, and that would turn enforcement off for every agent. Changes to the hook also only take effect after a build.
+- The tokenizer models POSIX/bash syntax, not zsh. Under zsh, process substitution `=(cmd)` and glob qualifiers such as `file(e:'cmd':)` are probably not blocked (only `<(` and `>(` are). Denying any unquoted `(` or `)` would close both.
+- `npx tsc --noEmit -p <config>` with `"incremental": true` and a `tsBuildInfoFile` can write a `.tsbuildinfo` file.
+- Read-only `git` commands follow the repository's git config (external diff, textconv, fsmonitor), so they are only safe while agents cannot edit `.git/config`.
+- Not covered by design: glob characters inside double quotes, a lone `]`, `~` expansion, and extglob. `echo`, `printf`, `pwd`, `true` and `which` take any arguments; only their redirections are checked.
+
 The same template registers `specpilot hook stop`, which runs whenever the agent stops. It does not block (that could leave the agent looping), but it shows a system message for every task in `mutation` or `verify`, e.g. `TASK-101 is in mutation, so the task is not done: run specpilot mutate TASK-101 and specpilot gate TASK-101.` Blocking a false "done" claim is part of step 8 (`verify`).
 
 `specpilot tdd red <task>` and `specpilot tdd green <task>` run the project's tests with `npm test -- --json --outputFile=<tmp>` (so the `test` script must end with `jest`, e.g. `"jest"` or `"tsc && jest"`) and record evidence next to the spec:
@@ -140,7 +151,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 
 | # | Step | Status | How it is checked |
 |---|---|---|---|
-| 0 | Project setup: TypeScript, Jest, CLI skeleton, CI | ✅ Done | Type check and `npm test` green on Node 18/20/22; `specpilot --help` lists the commands |
+| 0 | Project setup: TypeScript, Jest, CLI skeleton, CI | ✅ Done | Type check and `npm test` green on Node >=22 (CI: 22 and 24); `specpilot --help` lists the commands |
 | 1 | Spec format and `spec lint` | ✅ Done | Valid and invalid fixtures give exact error codes and line numbers |
 | 2 | Task state machine: `status`, `gate`, `reopen` | ✅ Done | Every illegal phase move is rejected; state persists in `state.json` |
 | 3 | Grill ledger and citation checker: `ledger check` | ✅ Done | A real citation passes; a missing file, wrong line or altered snippet fails |
@@ -156,6 +167,8 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 ## Development
 
 SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. It is built with two Claude Code subagents in [`.claude/agents/`](.claude/agents/): `tests-agent` writes the tests and may only edit `test/`, `code-agent` writes the code and may only edit `src/`, and the main session only coordinates. The repo's own [`.claude/settings.json`](.claude/settings.json) enforces this with `node dist/cli.js hook pre-tool-use --roles`, and it fails closed: if `dist/cli.js` is missing or the hook crashes, the edit is blocked and the agent is told to stop and ask the human how to fix it, one question at a time. Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
+
+Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node).
 
 ```bash
 npm install

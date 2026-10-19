@@ -28,6 +28,13 @@ describe('repo .claude/settings.json', () => {
   });
 });
 
+describe('repo package.json', () => {
+  test('requires Node >= 22, as Stryker does', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8'));
+    expect(pkg.engines?.node).toBe('>=22');
+  });
+});
+
 describe('the repo PreToolUse hook command', () => {
   let dir: string;
   const INPUT = JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: '/tmp/x.ts' } });

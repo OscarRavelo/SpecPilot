@@ -4,6 +4,7 @@ import path from 'path';
 import {
   bugProblems,
   mutantId,
+  nodeVersionProblem,
   parseEquivalents,
   parseStrykerReport,
   readMutationEvidence,
@@ -68,6 +69,40 @@ describe('strykerConfig', () => {
   test('uses no checker when the project root has no tsconfig.json', () => {
     const config = configFor(['src/a.js'], '/tmp/out/report.json', root);
     expect(config.checkers ?? []).toEqual([]);
+  });
+});
+
+describe('nodeVersionProblem', () => {
+  test('Node 20 is too old for Stryker, and the message says how to fix it', () => {
+    expect(nodeVersionProblem('20.11.0')).toBe(
+      'Stryker needs Node >= 22, but this is Node 20.11.0: upgrade Node and run specpilot mutate again',
+    );
+  });
+
+  test('Node 18 is too old for Stryker', () => {
+    expect(nodeVersionProblem('18.0.0')).toBe(
+      'Stryker needs Node >= 22, but this is Node 18.0.0: upgrade Node and run specpilot mutate again',
+    );
+  });
+
+  test('Node 21.99 is still too old for Stryker', () => {
+    expect(nodeVersionProblem('21.99.0')).toBe(
+      'Stryker needs Node >= 22, but this is Node 21.99.0: upgrade Node and run specpilot mutate again',
+    );
+  });
+
+  test('a version with a leading v is read, and Node v20 is too old', () => {
+    const problem = nodeVersionProblem('v20.1.0');
+    expect(problem).toContain('Stryker needs Node >= 22, but this is Node ');
+    expect(problem).toContain('20.1.0: upgrade Node and run specpilot mutate again');
+  });
+
+  test('a version that cannot be read is a problem, not a pass', () => {
+    expect(nodeVersionProblem('garbage')).toEqual(expect.any(String));
+  });
+
+  test.each(['22.0.0', '22.11.1', '25.2.1'])('Node %s is fine', (version) => {
+    expect(nodeVersionProblem(version)).toBeNull();
   });
 });
 
@@ -352,7 +387,7 @@ describe('bugProblems', () => {
   });
 
   // AC-1 counts only as a whole id: punctuation or the end of the name may follow it, but not
-  // another digit, a ".2" or "-x" that makes it a different id, and no letter may come right before it.
+  // another digit or letter, a ".2" or "-x" that makes it a different id, and no letter may come right before it.
   test('a test name counts for AC-1 only when it holds AC-1 as a whole id', () => {
     const counts = [
       'AC-1 adds',
@@ -362,7 +397,7 @@ describe('bugProblems', () => {
       'adds AC-1',
       'adds AC-1.',
     ];
-    const doesNotCount = ['AC-12 adds', 'AC-1.2 adds', 'AC-1-x adds', 'XAC-1 adds'];
+    const doesNotCount = ['AC-12 adds', 'AC-1x adds', 'AC-1a adds', 'AC-1.2 adds', 'AC-1-x adds', 'XAC-1 adds'];
     const caughtFor = (name: string) => bugProblems(report(suite('test/sum.test.ts', [assertionFailure(name)])), 'AC-1', ROOT).length === 0;
     expect(Object.fromEntries([...counts, ...doesNotCount].map((name) => [name, caughtFor(name)]))).toEqual({
       ...Object.fromEntries(counts.map((name) => [name, true])),
