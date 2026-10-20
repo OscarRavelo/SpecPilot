@@ -2,13 +2,16 @@
 
 **AI coding agents that work from specs, and get tested and measured before you trust them.**
 
-> 🚧 Early stage. I'm building this in public while learning AI engineering. Follow along on X: [@oscarravelo_ai](https://x.com/oscarravelo_ai)
+[![test](https://github.com/OscarRavelo/SpecPilot/actions/workflows/test.yml/badge.svg)](https://github.com/OscarRavelo/SpecPilot/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node >=22](https://img.shields.io/badge/node-%3E%3D22-339933.svg)](package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6.svg)](tsconfig.json)
 
-## Core principle: zero friction
+**Status: v0.1 in progress** (target: December 2026). Built in public while learning AI engineering; follow along on X: [@oscarravelo_ai](https://x.com/oscarravelo_ai).
 
-A developer clones SpecPilot into their project, answers a couple of setup questions, and starts working. No complex configuration.
+<!-- TODO: add a demo GIF of `specpilot verify` blocking a false "done" (exit 1, hallucination recorded). -->
 
-## The problem
+## Why SpecPilot
 
 On a real enterprise project, I piloted Spec-Driven Development with AI agents. Two developers shipped at roughly 10x our usual speed. But three problems kept coming up:
 
@@ -16,41 +19,72 @@ On a real enterprise project, I piloted Spec-Driven Development with AI agents. 
 2. **No idea what it cost.** We couldn't tell how much each task cost in tokens and money.
 3. **A fragile workflow.** Asking a question or correcting the agent mid-task often knocked it out of the spec-driven flow (research, grill-me, plan, implement).
 
-## Who it's for
+SpecPilot puts gates the agent cannot talk its way past between every step, and aims for zero friction: clone it into a project, answer a couple of setup questions, and start working.
 
-Developers on multi-person teams in large companies, where work arrives as small, concrete tasks like "create an endpoint" or "add these fields to an existing endpoint", often in old, messy codebases.
+## Key features
 
-## v0.1 scope (target: December 2026)
+- **Specs with testable acceptance criteria**: Given/When/Then per `AC-n`, checked by `specpilot spec lint`.
+- **Blocking grill-me**: every checklist item needs a cited source, repo citations are checked mechanically, and a clean-context auditor looks for gaps.
+- **Phase hooks**: Claude Code cannot edit tests or code in the wrong phase, and with `--roles` tests and code are written by two different agents.
+- **TDD with evidence**: red must fail on an assertion, green must pass with the tests byte for byte unchanged.
+- **Tests proven by mutation**: Stryker plus one targeted bug per acceptance criterion; a bug the tests miss sends the task back to red.
+- **False "done" detector**: `specpilot verify` reruns everything and records a hallucination when the agent's claim does not hold.
 
-- Take a small task described in a spec and run a coding agent on it.
-- **Verify** the result against the spec with tests, and flag claims of "done" that don't hold up.
-- **Measure** the cost and latency of every task.
-- Encourage the agent to **ask for context** when it's unsure, instead of guessing.
+## How it works
 
-- **Two cost modes:** *Standard* minimizes token usage to fit a typical ~$30/month dev plan (our pilot spent ~$300 in one month); *Max* uses the most powerful model when there's no token limit.
+SpecPilot is hybrid: the interactive phases run inside Claude Code (`.claude/` skills, subagents and hooks), while checks and metrics run in a Node CLI (`specpilot`, written in TypeScript) that works the same locally and in CI. Every task moves through a strict state machine, and only the CLI can advance it when a phase's gate passes:
 
-## Ground rules
+```mermaid
+flowchart LR
+  research -->|spec gate| grill
+  grill -->|grill gate| plan
+  plan -->|plan gate| red
+  red -->|red gate| green
+  green -->|green gate| mutation
+  mutation -->|mutation gate| verify
+  verify -->|specpilot verify| done
+  plan -. reopen .-> grill
+  mutation -. reopen .-> red
+  verify -. reopen .-> red
+```
 
-1. **Acceptance criteria must be well written:** each AC is testable, with a clear Given/When/Then and concrete values. If it can't be tested, it's badly written.
-2. **A human reviews the tests written from the ACs (human in the loop):** SpecPilot checks the evidence (each AC has a passing test that caught a real bug), but only a person can confirm a test really checks what its AC says.
+- **research → grill**: `spec.md` exists, passes `spec lint` and its `id` matches the folder.
+- **grill → plan**: citations check out, no open question, every checklist item and AC is covered, and the auditor found no blockers ([details](docs/grill.md)).
+- **plan → red**: not implemented yet in v0.1.
+- **red → green**: `red.json` exists and the tests are unchanged since `tdd red`.
+- **green → mutation**: `green.json` exists and matches `red.json` and the current tests.
+- **mutation → verify**: Stryker ran over the current code, survivors are approved, every AC has a caught bug, and code and tests match green ([details](docs/verify.md#mutation)).
+- **verify → done**: only `specpilot verify`, which reruns the checks ([below](#verify-the-false-done-detector)).
 
-Following both rules plus SpecPilot's gates is what makes the result trustworthy.
+Phase hooks block edits the current phase does not allow ([Phase hooks](docs/hooks.md), [Agent roles](docs/roles.md)).
 
-## Harness
+```bash
+npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
+npx specpilot ledger check TASK-101              # check every citation in the grill ledger
+npx specpilot grill checklist TASK-101           # show covered and missing checklist items
+npx specpilot grill hash TASK-101                # hash the auditor records in audit.md
+npx specpilot status                             # show each task's phase
+npx specpilot tdd red TASK-101                   # record that the new tests fail on assertions
+npx specpilot tdd green TASK-101                 # record that all tests pass, unchanged since red
+npx specpilot mutate TASK-101                    # run Stryker over the task's code
+npx specpilot mutate bug TASK-101 AC-1           # check that the tests catch a bug injected for AC-1
+npx specpilot gate TASK-101                      # close the current phase if its gate passes
+npx specpilot verify TASK-101                    # rerun the checks: move to done, or record a hallucination
+npx specpilot reopen TASK-101 red                # go back (only plan→grill, mutation→red, verify→red)
+```
 
-Stack assumed in target projects: **React + TypeScript** front end, **Node + TypeScript** back end, **Jest** tests (versions depend on the project).
+## Quickstart
 
-SpecPilot is hybrid: the interactive phases run inside Claude Code (`.claude/` skills, subagents and hooks), while checks and metrics run in a Node CLI (`specpilot`, written in TypeScript) that works the same locally and in CI.
+SpecPilot is not published to npm yet. Clone it, install and run the tests:
 
-Every task moves through a strict state machine, and only the CLI can advance it when a phase's gate passes:
+```bash
+git clone https://github.com/OscarRavelo/SpecPilot.git
+cd SpecPilot
+npm install
+npm test            # builds dist/ and runs Jest
+```
 
-`research → grill → plan → red → green → mutation → verify → done`
-
-- **Grill-me is a blocking gate.** The agent asks one question at a time until every checklist item (contract, validation, errors, data, auth, backwards compatibility, edge cases, what not to touch) has a source: the spec (`[spec:AC-2]`), the repo (`[repo:file:line "snippet"]`) or the human (`[human:Q7]`). Repo citations are checked mechanically, so an invented citation fails the gate. A clean-context auditor subagent then looks for gaps.
-- **Rule #1: TDD, then prove the tests.** Tests are written first and must fail on an assertion. After the code turns them green, bugs are injected (Stryker plus one targeted bug per acceptance criterion). The tests must catch them; the bugs are then removed and the code must match the green version byte for byte. A bug the tests miss (a surviving mutant) is a test gap: the task goes back to red with `specpilot reopen <task> red`, the code agent puts the mutant back, the tests agent writes the missing test and sees it fail against the mutant, then the code agent removes the mutant (green) and mutation runs again. Tests are never added during mutation, and tests and code are always written by two different agents.
-- **Verify** reruns everything independently. If the agent says "done" and it isn't, the task is blocked and counted as a hallucination.
-
-Each task lives in `specs/<task-id>/spec.md` (start from [`templates/spec.md`](templates/spec.md)). The `id` must match the folder name, and `type` is one of `new-endpoint`, `endpoint-fields` or `react-component`. Acceptance criteria are written as `### AC-<n>: <title>` under `## Acceptance criteria`, with `- Given` / `- When` / `- Then` steps; `- And` continues the previous step:
+Each task lives in `specs/<task-id>/spec.md` (start from [`templates/spec.md`](templates/spec.md)). The `id` must match the folder name, and `type` is one of `new-endpoint`, `endpoint-fields` or `react-component`. Acceptance criteria are `### AC-<n>: <title>` with `- Given` / `- When` / `- Then` steps (`- And` continues the previous step):
 
 ```markdown
 ---
@@ -69,127 +103,49 @@ type: endpoint-fields
 - And the user with id 42 has phone_number "+34623234321"
 ```
 
-The grill-me answers live next to the spec in `specs/<task-id>/grill.md` (start from [`templates/grill.md`](templates/grill.md)). Questions have a status (`open`, `answered`, or `assumption`, which needs `Approved: yes` from the human). Every fact must cite at least one source and is tagged with the checklist items it covers:
-
-```markdown
-## Facts
-
-- (data) Users are updated by updateUser [repo:src/routes/users.ts:9 "export function updateUser("]
-- (contract) A successful update responds 200 [spec:AC-1]
-- (validation, errors) Invalid phone numbers respond 400 with INVALID_PHONE [human:Q1]
-```
-
-`specpilot ledger check` verifies each citation: a repo file must exist inside the project, the lines must exist, and the snippet (at least 8 characters) must appear literally in those lines. An acceptance criterion must exist in the spec, and a cited question must be answered or an approved assumption. An invented citation fails.
-
-Each task type has a checklist the grill must cover (`specpilot grill checklist` shows it):
-
-| Task type | Checklist items |
-|---|---|
-| `new-endpoint` | contract, validation, errors, data, auth, edge-cases, out-of-scope |
-| `endpoint-fields` | contract, validation, errors, data, auth, compatibility, edge-cases, out-of-scope |
-| `react-component` | contract, states, data, validation, errors, auth, accessibility, compatibility, edge-cases, out-of-scope |
-
-The grill phase closes (`specpilot gate`) only when the ledger check is clean, no question is open, every checklist item and every acceptance criterion is covered by a cited fact, and the `grill-auditor` subagent has reviewed this exact spec and ledger with no blockers. The auditor writes `audit.md` with a hash of both files, so editing either one after the audit makes it stale.
-
-Claude Code templates for this phase: the [`sp-grill` skill](templates/.claude/skills/sp-grill/SKILL.md), which runs the one-question-at-a-time loop, and the [`grill-auditor` subagent](templates/.claude/agents/grill-auditor.md), a clean-context reviewer that cannot edit code.
-
-Phase hooks keep the agent inside the workflow. The [`settings.json` template](templates/.claude/settings.json) runs `specpilot hook pre-tool-use` before every `Write`, `Edit`, `MultiEdit`, `NotebookEdit` and `Bash` call, and blocks the edit (exit code 2, with the reason shown to the agent) when the task's phase does not allow it:
-
-| Phase | Tests | Source code |
-|---|---|---|
-| `research`, `grill`, `plan` | blocked | blocked |
-| `red` | allowed | blocked |
-| `green`, `mutation` | blocked | allowed |
-| `verify` | blocked | blocked |
-
-Test files are `*.test.*` / `*.spec.*` and anything under `test/`, `tests/` or `__tests__/`; source code is any other `.ts`, `.tsx`, `.js` or `.jsx` file (including `.mjs`/`.cjs`). Other files, such as docs, the spec and the grill ledger, can always be edited. `state.json`, `red.json`, `green.json` and `mutation.json` can never be edited by the agent (only the CLI writes them), `equivalents.md` is approved only by the human, and `audit.md` can only be written by the `grill-auditor` subagent. With no active task, nothing is blocked. With several active tasks, an edit must be allowed by all of them, unless `SPECPILOT_TASK=<task-id>` chooses the one you are working on. A corrupt `state.json` blocks code and test edits instead of letting them through. For `Bash`, the hook finds the files a command writes: redirections (`>`, `>>`, `2>`, `&>`), `tee`, `sed -i`, `perl -i`, `cp`, `mv`, `rm`, `touch`, `truncate` and `dd of=`, across `&&`, `||`, `;` and pipes, skipping heredoc bodies. Known limit: files written from inside a program (`node -e`, `python -c`, `git apply`, `git checkout -- <file>`) are not detected.
-
-With `--roles` (`specpilot hook pre-tool-use --roles`), the hook also enforces agent roles by the `agent_type` Claude Code passes for subagents: test files may only be edited by `tests-agent`, source code only by `code-agent`, those two agents may edit nothing else, and the main session and other agents may not edit tests or source code at all. Both the role and the phase must allow an edit. Roles are off by default, so a project without these two agents keeps working.
-
-With `--roles`, `tests-agent` and `code-agent` may write files only with Edit or Write, never from Bash. For them a Bash command runs only if every part of it is on an allowlist of read-only commands, each with its own list of read-only options: `cat`, `head`, `tail`, `ls`, `wc`, `diff`, `grep`, `rg`, `find`, `echo`, `printf`, `pwd`, `true`, `which`, read-only `git` subcommands, `npm test`, `npm run typecheck`, `npm run build`, `npx jest` and `npx tsc --noEmit`. Each agent can also run only its own `specpilot` commands: `tests-agent` gets `status` and `tdd red <task>`; `code-agent` gets `status`, `tdd green <task>`, `mutate <task>` and `mutate bug <task> AC-n`. `gate` and `reopen` are left to the main session and the human. Anything the hook cannot classify is blocked: unknown programs or options, write redirections (only `/dev/null` and descriptor copies such as `2>&1` are allowed), `VAR=value` prefixes, `cd`, heredocs, `$(…)`, backticks, variable expansion, `$'…'`, unquoted backslashes and globs, `eval`/`exec`/`source` and unterminated quotes. The message reads `Blocked by SpecPilot: <agent> may not run this command from Bash (<reason>). Only allowlisted read-only commands may run; write files with Edit or Write. Allowed in Bash: …`. The main session and other agents keep the target-based Bash check described above.
-
-Known limits of the Bash allowlist:
-
-- `npm test`, `npx jest` and `specpilot tdd red|green` run code the agents wrote with Edit/Write. A test or source file can call `fs.writeFileSync` or `child_process`, and the allowlist does not limit what that code does.
-- The hook runs from `dist/cli.js`, which is built from `src/`. `code-agent` could weaken `src/hooks.ts` and rebuild, and that would turn enforcement off for every agent. Changes to the hook also only take effect after a build.
-- The tokenizer models POSIX/bash syntax, not zsh. Under zsh, process substitution `=(cmd)` and glob qualifiers such as `file(e:'cmd':)` are probably not blocked (only `<(` and `>(` are). Denying any unquoted `(` or `)` would close both.
-- `npx tsc --noEmit -p <config>` with `"incremental": true` and a `tsBuildInfoFile` can write a `.tsbuildinfo` file.
-- Read-only `git` commands follow the repository's git config (external diff, textconv, fsmonitor), so they are only safe while agents cannot edit `.git/config`.
-- Not covered by design: glob characters inside double quotes, a lone `]`, `~` expansion, and extglob. `echo`, `printf`, `pwd`, `true` and `which` take any arguments; only their redirections are checked.
-
-The same template registers `specpilot hook stop`, which runs whenever the agent stops. It does not block (that could leave the agent looping), but it shows a system message for every task in `mutation` or `verify`, e.g. `TASK-101 is in mutation, so the task is not done: run specpilot mutate TASK-101 and specpilot gate TASK-101.` or `TASK-101 is in verify, so the task is not done: run specpilot verify TASK-101.` A false "done" claim is blocked by `specpilot verify`, which records it as a hallucination.
-
-`specpilot tdd red <task>` and `specpilot tdd green <task>` run the project's tests with `npm test -- --json --outputFile=<tmp>` (so the `test` script must end with `jest`, e.g. `"jest"` or `"tsc && jest"`) and record evidence next to the spec:
-
-- **Red** (`red.json`): at least one test fails, every failure is an `expect` assertion, and no suite fails to run. A test that throws, a missing module or a compile error is not red.
-- **Green** (`green.json`): every test passes, and every test file is byte for byte the one recorded by `tdd red`: none changed, added or removed.
-
-Both also record a hash of every source file, so mutation knows which code the task changed.
-
-The `red` gate needs `red.json` with the tests unchanged since; the `green` gate needs `green.json`, matching both `red.json` and the current tests. To change a test after red, go back with `specpilot reopen <task> red`.
-
-In the `mutation` phase the tests have to prove they catch bugs:
-
-- **`specpilot mutate <task>`** runs [Stryker](https://stryker-mutator.io/) over the source files the task changed between `red.json` and `green.json`, plus every file mutated in an earlier round, so the set only grows after a reopen. Code and tests must be byte for byte the green version. The project needs `npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker`; SpecPilot generates the Stryker config (Jest runner, plus the TypeScript checker when the project has a `tsconfig.json`, so a mutant that does not compile is not counted as caught). Only the mutated files get Stryker's `// @ts-nocheck`, so test fixtures keep their line numbers. The result goes to `mutation.json`. If Stryker exits with an error, nothing is recorded. Before Stryker starts, `mutate` checks that each file's `mutate` entry matches it the way Stryker's own matcher does (with the `minimatch` Stryker loads); if one does not, it stops with a one-line message naming the file. A task file that Stryker leaves out of its report (such as a file with only types) is not an error: `mutate` prints `no mutants: <file>` and records it under `noMutants` in `mutation.json`. If Stryker leaves every task file out, `mutate` fails and records nothing. Stryker's `.stryker-tmp/` and `reports/` folders are never hashed as code or tests.
-- Every mutant that is not killed (`Survived`, `NoCoverage`, `Pending`, `RuntimeError`, or `Ignored` by a `// Stryker disable` comment) is listed in `specs/<task>/equivalents.md`, with an id made of `file:line mutator mutated-code`. Only the human can accept one as equivalent, by writing `- Approved: yes` and a `- Reason:` under its id. Approvals are kept when `mutate` runs again, as long as the id still matches exactly. Any other survivor is a test gap: `specpilot reopen <task> red`.
-- **`specpilot mutate bug <task> AC-n`**: the code agent injects one targeted bug for the criterion and runs this command. The bug counts as caught only if a test with `AC-n` in its name fails on an assertion and no suite fails to run (so a bug that does not compile is not caught). Then the code agent removes the bug. A missed bug is a test gap, just like a surviving mutant: a later bug that is caught does not hide it, and the task goes back with `specpilot reopen <task> red`.
-
-The `mutation` gate passes only when Stryker ran over the current code and tests, every survivor is approved in `equivalents.md`, every acceptance criterion has a caught bug and no missed one recorded after the current `tdd green` against the same tests, and code and tests are byte for byte the green version again (a leftover bug fails the gate).
-
-Known limitation: SpecPilot's own CLI tests run the compiled `dist/cli.js`, which Stryker does not mutate, so mutants in the CLI code survive even when a CLI test covers that behaviour. Those survivors are real test gaps (they need unit tests that import `src/`) and are never approved as equivalents. Target projects whose tests import `src/` directly are not affected.
-
-`specpilot mutate` escapes glob characters (`* ? ( ) [ ]`) in the file paths it gives Stryker, so a file like `src/[id].ts` is mutated and gets `// @ts-nocheck`, and nothing else does. A task file whose path has `{`, `}` or `,`, or a segment starting with `.`, stops `mutate` with a message to rename or move it and go back with `specpilot reopen <task> red`.
-
-Known limits of the files `mutate` passes to Stryker:
-
-- A task file at the project root whose name starts with `!` is never mutated: Stryker reads the entry as an exclude.
-- A task file whose path ends in `:N-M` or `:N:C-M:C` is read by Stryker as a line range of another file.
-- A task whose only changed files have nothing to mutate (types only) always fails `mutate`: Stryker leaves every task file out of its report, and `mutate` treats that as a failed run.
-- A project root whose path forms a glob, such as a `[...]` character class or a `{a,b}` list, makes Stryker match no file at all, because Stryker does not escape the root. `mutate` now stops before Stryker starts and names the file. A lone `,`, `!`, `*`, `?`, `(` or unpaired bracket in the root still matches (checked with minimatch 10).
-- The "Stryker would skip" message blames the project root whenever the root contains any of `*?[]{}(),!`, even if the root still matches and the mismatch has another cause.
-- `mutation.json` checks only that `noMutants` is a list, not that each item is a path (the same loose check as `files`).
-- On POSIX, a backslash in a file name is turned into `/` by Stryker, so the entry can also match another file.
-- Stryker always ignores `node_modules` (in any letter case) and symlinked files, and SpecPilot never hashes code under `dist/`, `build/`, `coverage/`, `reports/` or symlinks, so task code there is never mutated.
-
-### Verify: the false "done" detector
-
-**`specpilot verify <task>`** is the only way from `verify` to `done` (`specpilot gate` in `verify` just says to run it). It reruns the checks itself instead of trusting the agent's claim:
-
-1. the `mutation` gate again (code and tests byte for byte the green version, Stryker evidence fresh, survivors approved, a caught bug for every acceptance criterion);
-2. a fresh `npm test`, where every suite must run and every test pass;
-3. coverage of every acceptance criterion: each `AC-n` in the spec needs at least one **passing** test whose name holds `AC-n` as a whole id (the same rule as `mutate bug`: `AC-1` is not `AC-12` or `AC-1.2`).
-
-If everything holds, it prints one `✓ AC-n (k tests)` line per criterion, moves the task to `done` and exits 0. If anything fails, the agent claimed done when it was not: the task stays in `verify`, the reasons are appended as a hallucination to `specs/<task>/hallucinations.json` (never truncated), and `verify` exits 1 with `Go back with specpilot reopen <task> red`. A spec with no acceptance criteria also blocks the task. When `verify` cannot run at all (wrong usage, no such task, a phase other than `verify`, a corrupt `state.json`, an unreadable spec, a corrupt `hallucinations.json`, checked before the tests run, no Jest report, or a blocked run whose `hallucinations.json` cannot be written, e.g. `Cannot write specs/TASK-101/hallucinations.json: EACCES: permission denied, …`), it prints one line, records nothing and exits 2.
-
-Known limits of `verify` (v0.1):
-
-- Coverage is by name only: a test with `AC-n` in its name covers that criterion even if its assertions check something else. That is why a human reviews the tests (see the ground rules).
-- `verify` does not run Stryker again; it only checks that the mutation evidence still matches the code and tests.
-- Nothing protects `hallucinations.json`: an agent could edit or delete it.
-- Only `verify` records hallucinations; a failing `gate` in an earlier phase is not counted as one.
-- Hallucinations are not aggregated or reported yet (step 11, `specpilot report`).
-- Coverage counts passing tests from the whole repo, not only the task's own test files: AC ids repeat across specs (every task has an `AC-1`), so a test named `AC-2 …` written for another task also covers this task's `AC-2`.
-- `hallucinations.json` is rewritten whole, not atomically: a write that fails part way (for example, a full disk) can cut it short and lose earlier entries, although `verify` still exits 2.
-- The test for a write that fails is skipped when the tests run as root, because root ignores the read-only folder it relies on.
-- If another process corrupts `hallucinations.json` between the check before the tests and the write, `verify` reports it as `Cannot write …: Corrupt hallucinations.json …` (still exit 2, nothing recorded).
-- `hallucinations.json` only has to hold a JSON array to be read; its entries are not checked.
-
 ```bash
-npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
-npx specpilot ledger check TASK-101              # check every citation in the grill ledger
-npx specpilot grill checklist TASK-101           # show covered and missing checklist items
-npx specpilot grill hash TASK-101                # hash the auditor records in audit.md
-npx specpilot status                             # show each task's phase
-npx specpilot tdd red TASK-101                   # record that the new tests fail on assertions
-npx specpilot tdd green TASK-101                 # record that all tests pass, unchanged since red
-npx specpilot mutate TASK-101                    # run Stryker over the task's code
-npx specpilot mutate bug TASK-101 AC-1           # check that the tests catch a bug injected for AC-1
-npx specpilot gate TASK-101                      # close the current phase if its gate passes
-npx specpilot verify TASK-101                    # rerun the checks: move to done, or record a hallucination
-npx specpilot reopen TASK-101 red                # go back (only plan→grill, mutation→red, verify→red)
+npx specpilot spec lint specs/TASK-102/spec.md
+npx specpilot status
 ```
 
-## v0.1 progress
+## Ground rules
+
+1. **Acceptance criteria must be well written:** each AC is testable, with a clear Given/When/Then and concrete values. If it can't be tested, it's badly written.
+2. **A human reviews the tests written from the ACs (human in the loop):** SpecPilot checks the evidence (each AC has a passing test that caught a real bug), but only a person can confirm a test really checks what its AC says.
+
+Following both rules plus SpecPilot's gates is what makes the result trustworthy.
+
+## Verify: the false "done" detector
+
+**`specpilot verify <task>`** is the only way from `verify` to `done`. Instead of trusting the agent's claim, it reruns:
+
+1. the `mutation` gate (code and tests byte for byte green, Stryker evidence fresh, survivors approved, a caught bug per AC);
+2. a fresh `npm test`, where every suite must run and every test pass;
+3. AC coverage: each `AC-n` needs at least one **passing** test with `AC-n` as a whole id in its name.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Everything holds: one `✓ AC-n (k tests)` line per criterion, the task moves to `done`. |
+| `1` | Blocked: the agent claimed done when it was not. The reasons are appended as a hallucination to `specs/<task>/hallucinations.json` and the task stays in `verify` (`Go back with specpilot reopen <task> red`). |
+| `2` | Cannot run (wrong usage, wrong phase, corrupt or unreadable files, no Jest report, or `hallucinations.json` cannot be written): one line, nothing recorded. |
+
+Full behaviour: [docs/verify.md](docs/verify.md).
+
+## Who it's for
+
+Developers on multi-person teams in large companies, where work arrives as small, concrete tasks like "create an endpoint" or "add these fields to an existing endpoint", often in old, messy codebases.
+
+Stack assumed in target projects: **React + TypeScript** front end, **Node + TypeScript** back end, **Jest** tests (versions depend on the project).
+
+## Roadmap
+
+v0.1 scope (target: December 2026):
+
+- Take a small task described in a spec and run a coding agent on it.
+- **Verify** the result against the spec with tests, and flag claims of "done" that don't hold up.
+- **Measure** the cost and latency of every task.
+- Encourage the agent to **ask for context** when it's unsure, instead of guessing.
+- **Two cost modes:** *Standard* minimizes token usage to fit a typical ~$30/month dev plan (our pilot spent ~$300 in one month); *Max* uses the most powerful model when there's no token limit.
 
 Every step is built with rule #1 on SpecPilot itself: tests first, then code, then injected bugs that the tests must catch.
 
@@ -208,22 +164,17 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 10 | `specpilot init` (zero friction) | — | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
 | 11 | Evaluation on ~10 real tasks | — | `specpilot report` fills the success table below |
 
-## Development
-
-SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. It is built with two Claude Code subagents in [`.claude/agents/`](.claude/agents/): `tests-agent` writes the tests and may only edit `test/`, `code-agent` writes the code and may only edit `src/`, and the main session only coordinates. The repo's own [`.claude/settings.json`](.claude/settings.json) enforces this with `node dist/cli.js hook pre-tool-use --roles`, and it fails closed: if `dist/cli.js` is missing or the hook crashes, the edit is blocked and the agent is told to stop and ask the human how to fix it, one question at a time. Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
-
-Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node).
-
-```bash
-npm install
-npm run typecheck   # tsc over src/ and test/
-npm test            # builds dist/ and runs Jest
-```
-
-## Out of scope (for now)
+Out of scope (for now):
 
 - Keeping the agent on track when the user interrupts mid-task.
 - Multi-agent orchestration, UI polish, and supporting every framework.
+
+Later (parked ideas):
+
+- **v0.2 goal: Azure DevOps integration.** After a couple of setup questions, read work items, draft the spec from the PO's acceptance criteria, detect the Node version (front and back), and generate the best tests for that version.
+- Recovering the spec-driven flow after a mid-task interruption.
+- A GitHub Action that blocks PRs that fail the evals.
+- An MCP server for spec-driven development.
 
 ## How we measure success
 
@@ -236,10 +187,30 @@ Tested on ~10 real tasks in a legacy ("spaghetti") codebase:
 | Useful questions | How often it asked for context instead of failing |
 | Cost per task | Average € spent per task |
 
-## Later (parked ideas)
+## Development
 
-- **v0.2 goal: Azure DevOps integration.** After a couple of setup questions, read work items, draft the spec from the PO's acceptance criteria, detect the Node version (front and back), and generate the best tests for that version.
+SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. It is built with two Claude Code subagents, `tests-agent` (edits only `test/`) and `code-agent` (edits only `src/`), enforced by the repo's own role hook ([Agent roles](docs/roles.md#how-specpilot-itself-uses-roles)). Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
 
-- Recovering the spec-driven flow after a mid-task interruption.
-- A GitHub Action that blocks PRs that fail the evals.
-- An MCP server for spec-driven development.
+Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node). [CI](.github/workflows/test.yml) runs the type check and `npm test` on Node 22 and 24. The suite currently has 1084 tests in 13 suites.
+
+```bash
+npm install
+npm run typecheck   # tsc over src/ and test/
+npm test            # builds dist/ and runs Jest
+```
+
+## Documentation
+
+- [Spec format and the grill-me phase](docs/grill.md): ledger syntax, citation checks, checklists, the grill gate.
+- [Phase hooks](docs/hooks.md): what each phase blocks, protected files, Bash detection, the stop hook.
+- [Agent roles](docs/roles.md): `--roles` and the Bash allowlist for `tests-agent` and `code-agent`.
+- [Red, green, mutation and verify](docs/verify.md): evidence files, `mutate`, `mutate bug`, `equivalents.md`, the full `verify` behaviour.
+- [Known limits](docs/known-limits.md): every known limit of v0.1, by feature.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE) © 2026 Oscar Ravelo
