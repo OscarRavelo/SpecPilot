@@ -566,8 +566,14 @@ function verify(taskId: string | undefined): number {
 
   const problems = verifyProblems(taskDir, root, report, spec);
   if (problems.length > 0) {
-    recordHallucination(taskDir, { taskId, at: new Date().toISOString(), phase: 'verify', reasons: problems });
     const file = [SPECS_DIR, taskId, 'hallucinations.json'].join('/');
+    // A blocked run that cannot be recorded means verify could not run.
+    try {
+      recordHallucination(taskDir, { taskId, at: new Date().toISOString(), phase: 'verify', reasons: problems });
+    } catch (err) {
+      console.error(`Cannot write ${file}: ${(err as Error).message}`);
+      return 2;
+    }
     console.error(`VERIFY: ${taskId} blocked, recorded as a hallucination in ${file}`);
     for (const problem of problems) console.error(`  - ${problem}`);
     console.error(`Go back with specpilot reopen ${taskId} red`);

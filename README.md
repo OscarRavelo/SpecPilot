@@ -159,7 +159,7 @@ Known limits of the files `mutate` passes to Stryker:
 2. a fresh `npm test`, where every suite must run and every test pass;
 3. coverage of every acceptance criterion: each `AC-n` in the spec needs at least one **passing** test whose name holds `AC-n` as a whole id (the same rule as `mutate bug`: `AC-1` is not `AC-12` or `AC-1.2`).
 
-If everything holds, it prints one `✓ AC-n (k tests)` line per criterion, moves the task to `done` and exits 0. If anything fails, the agent claimed done when it was not: the task stays in `verify`, the reasons are appended as a hallucination to `specs/<task>/hallucinations.json` (never truncated), and `verify` exits 1 with `Go back with specpilot reopen <task> red`. A spec with no acceptance criteria also blocks the task. When `verify` cannot run at all (wrong usage, no such task, a phase other than `verify`, a corrupt `state.json`, an unreadable spec, a corrupt `hallucinations.json`, checked before the tests run, or no Jest report), it prints one line, records nothing and exits 2.
+If everything holds, it prints one `✓ AC-n (k tests)` line per criterion, moves the task to `done` and exits 0. If anything fails, the agent claimed done when it was not: the task stays in `verify`, the reasons are appended as a hallucination to `specs/<task>/hallucinations.json` (never truncated), and `verify` exits 1 with `Go back with specpilot reopen <task> red`. A spec with no acceptance criteria also blocks the task. When `verify` cannot run at all (wrong usage, no such task, a phase other than `verify`, a corrupt `state.json`, an unreadable spec, a corrupt `hallucinations.json`, checked before the tests run, no Jest report, or a blocked run whose `hallucinations.json` cannot be written, e.g. `Cannot write specs/TASK-101/hallucinations.json: EACCES: permission denied, …`), it prints one line, records nothing and exits 2.
 
 Known limits of `verify` (v0.1):
 
@@ -169,7 +169,8 @@ Known limits of `verify` (v0.1):
 - Only `verify` records hallucinations; a failing `gate` in an earlier phase is not counted as one.
 - Hallucinations are not aggregated or reported yet (step 11, `specpilot report`).
 - Coverage counts passing tests from the whole repo, not only the task's own test files: AC ids repeat across specs (every task has an `AC-1`), so a test named `AC-2 …` written for another task also covers this task's `AC-2`.
-- If `hallucinations.json` cannot be written (for example, a read-only folder), `verify` stops with an uncaught error (exit 1) and nothing is recorded.
+- `hallucinations.json` is rewritten whole, not atomically: a write that fails part way (for example, a full disk) can cut it short and lose earlier entries, although `verify` still exits 2.
+- The test for a write that fails is skipped when the tests run as root, because root ignores the read-only folder it relies on.
 - `hallucinations.json` only has to hold a JSON array to be read; its entries are not checked.
 
 ```bash

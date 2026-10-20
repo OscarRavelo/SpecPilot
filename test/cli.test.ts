@@ -1722,6 +1722,30 @@ describe('specpilot verify', () => {
     expect(phaseOf()).toBe('verify');
   });
 
+  // Root ignores file permissions, so a read-only folder cannot make the write fail there.
+  const testUnlessRoot = process.getuid?.() === 0 ? test.skip : test;
+  testUnlessRoot('a blocked verify that cannot write hallucinations.json exits 2 with one line and records nothing', () => {
+    setUp(UNCOVERED_TEST);
+    const taskDir = file('specs/TASK-101');
+    // Everything verify reads is in place and hallucinations.json does not exist, so only the write fails.
+    fs.chmodSync(taskDir, 0o555);
+    let result: { status: number | null; stdout: string; stderr: string };
+    try {
+      result = runIn(project, 'verify', 'TASK-101');
+    } finally {
+      fs.chmodSync(taskDir, 0o755);
+    }
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr.endsWith('\n')).toBe(true);
+    const lines = result.stderr.trimEnd().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].startsWith('Cannot write specs/TASK-101/hallucinations.json: ')).toBe(true);
+    expect(lines[0]).toMatch(/EACCES|EPERM|permission/i);
+    expect(fs.existsSync(file(HALLUCINATIONS))).toBe(false);
+    expect(phaseOf()).toBe('verify');
+  });
+
   test('earlier hallucinations are kept: a blocked run appends, a passing run leaves the file as it was', () => {
     const earlier = { taskId: 'TASK-101', at: '2026-10-19T09:00:00.000Z', phase: 'verify', reasons: ['AC-1 has no test that covers it'] };
     setUp(UNCOVERED_TEST);
