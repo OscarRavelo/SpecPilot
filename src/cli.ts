@@ -24,6 +24,7 @@ import {
 } from './tdd';
 import {
   bugProblems,
+  filesMissingFromReport,
   missingSourceHashes,
   nodeVersionProblem,
   parseEquivalents,
@@ -32,6 +33,7 @@ import {
   renderEquivalents,
   runStryker,
   strykerFileProblem,
+  strykerMatchProblem,
   survivors,
   unapprovedSurvivors,
   writeMutationEvidence,
@@ -440,8 +442,24 @@ function mutateRun({ taskId, taskDir, red, green, root, sourceFiles, testFiles }
     return 1;
   }
 
-  const mutants = parseStrykerReport(runStryker(root, files), root);
-  writeMutationEvidence(taskDir, { ...previous, at: new Date().toISOString(), sourceFiles, testFiles, files, mutants });
+  // A mutate entry that matches nothing only makes Stryker print a warning, so it is caught before the run.
+  const matchProblem = strykerMatchProblem(root, files);
+  if (matchProblem) {
+    console.error(matchProblem);
+    return 1;
+  }
+
+  const report = runStryker(root, files);
+  const mutants = parseStrykerReport(report, root);
+  // Stryker leaves a file with nothing to mutate (only types) out of its report. That is fine for some
+  // task files, but a report with none of them proves nothing.
+  const noMutants = filesMissingFromReport(report, root, files);
+  if (noMutants.length === files.length) {
+    console.error(`Stryker reported none of the task files (${files.join(', ')}): see its output above`);
+    return 1;
+  }
+  writeMutationEvidence(taskDir, { ...previous, at: new Date().toISOString(), sourceFiles, testFiles, files, noMutants, mutants });
+  for (const file of noMutants) console.log(`no mutants: ${file}`);
 
   const equivalentsFile = path.join(taskDir, 'equivalents.md');
   const approvals = fs.existsSync(equivalentsFile) ? parseEquivalents(fs.readFileSync(equivalentsFile, 'utf8')) : [];

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Stands in for `npx stryker run <config>` in tests: it records every config it is given in
 // stryker-calls.json (in the project root, where SpecPilot runs it) and writes a JSON report whose
-// mutants come from stryker-mutants.json ({ "<file>": [<Stryker mutant>, ...] }). If
-// stryker-mutants.json is the string "no-report", it writes no report at all (and exits 0, so only the
-// missing report is wrong). If stryker-exit.json holds a number, it exits with that status after
-// writing the report, like a Stryker run that failed part way.
+// mutants come from stryker-mutants.json ({ "<file>": [<Stryker mutant>, ...] }). A file whose value
+// there is null is left out of the report, as real Stryker leaves out a file with nothing to mutate
+// (one with only types). If stryker-mutants.json is the string "no-report", it writes no report at all
+// (and exits 0, so only the missing report is wrong). If stryker-exit.json holds a number, it exits
+// with that status after writing the report, like a Stryker run that failed part way.
 const fs = require('fs');
 
 const config = JSON.parse(fs.readFileSync(process.argv[process.argv.length - 1], 'utf8'));
@@ -17,6 +18,9 @@ const plan = fs.existsSync('stryker-mutants.json') ? JSON.parse(fs.readFileSync(
 if (plan === 'no-report') process.exit(exitStatus);
 
 const files = {};
-for (const file of config.mutate) files[file] = { language: 'javascript', source: '', mutants: plan[file] || [] };
+for (const file of config.mutate) {
+  if (plan[file] === null) continue;
+  files[file] ={ language: 'javascript', source: '', mutants: plan[file] || [] };
+}
 fs.writeFileSync(config.jsonReporter.fileName, JSON.stringify({ schemaVersion: '1', files }));
 process.exit(exitStatus);

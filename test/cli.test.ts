@@ -676,11 +676,17 @@ describe('specpilot mutate', () => {
   };
   // Stands in for an installed Stryker: its `stryker` bin records each config in stryker-calls.json and
   // reports the mutants listed in stryker-mutants.json (see test/fixtures/stryker/fake-stryker.js).
+  // mutate matches each file with the minimatch that the installed Stryker loads, so the minimatch real
+  // Stryker resolves in this repo is linked next to the stand-in.
+  const STRYKER_MINIMATCH = path.dirname(
+    require.resolve('minimatch/package.json', { paths: [path.join(NODE_MODULES, '@stryker-mutator', 'core')] }),
+  );
   const fakeStryker = () => {
     const dir = file('node_modules/@stryker-mutator/core');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: '@stryker-mutator/core', version: '0.0.0', main: 'index.js' }));
     fs.writeFileSync(path.join(dir, 'index.js'), 'module.exports = {};\n');
+    fs.symlinkSync(STRYKER_MINIMATCH, file('node_modules/minimatch'), 'dir');
     fs.mkdirSync(file('node_modules/.bin'), { recursive: true });
     fs.copyFileSync(path.join(__dirname, 'fixtures', 'stryker', 'fake-stryker.js'), file('node_modules/.bin/stryker'));
     fs.chmodSync(file('node_modules/.bin/stryker'), 0o755);
@@ -828,7 +834,8 @@ describe('specpilot mutate', () => {
         file('specs/TASK-101/mutation.json'),
         JSON.stringify({ taskId: 'TASK-101', at: '2026-10-18T10:10:00.000Z', sourceFiles: {}, testFiles: {}, mutants: [], bugs: [], ...overrides }),
       );
-    const strykerReports = (plan: Record<string, unknown[]>) => fs.writeFileSync(file('stryker-mutants.json'), JSON.stringify(plan));
+    // A file planned as null is left out of the report, as real Stryker leaves out a types-only file.
+    const strykerReports = (plan: Record<string, unknown[] | null>) => fs.writeFileSync(file('stryker-mutants.json'), JSON.stringify(plan));
     const strykerCalls = () => JSON.parse(fs.readFileSync(file('stryker-calls.json'), 'utf8'));
     const equivalents = () => fs.readFileSync(file('specs/TASK-101/equivalents.md'), 'utf8');
 
@@ -973,6 +980,136 @@ describe('specpilot mutate', () => {
       expect(result.stderr).toMatch(/hidden/);
       expect(result.stderr).toContain('specpilot reopen TASK-101 red');
       expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
+    // Real Stryker's FileMatcher resolves each mutate entry against the project root without escaping
+    // the root, so "[x]" in a folder above the files is a character class and the entry matches nothing.
+    test('a project root inside a folder with "[x]" in its name stops mutate before Stryker starts and names the file', () => {
+      const outer = project;
+      const inside = path.join(outer, 'dir[x]', 'app');
+      fs.mkdirSync(inside, { recursive: true });
+      for (const entry of fs.readdirSync(outer)) {
+        if (entry !== 'dir[x]') fs.renameSync(path.join(outer, entry), path.join(inside, entry));
+      }
+      project = inside;
+      try {
+        writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_GREEN });
+        writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+        strykerReports({ 'src/a.js': [strykerMutant(1, 'x - 1', 'Killed')] });
+
+        const result = runIn(project, 'mutate', 'TASK-101');
+        expect(fs.existsSync(file('stryker-calls.json'))).toBe(false);
+        expect(result.status).toBe(1);
+        expect(result.stderr.endsWith('\n')).toBe(true);
+        expect(result.stderr.trimEnd().split('\n')).toHaveLength(1);
+        expect(result.stderr).toContain('src/a.js');
+        // The CLI's root is process.cwd(), which resolves symlinks such as macOS's /var -> /private/var.
+        expect(result.stderr).toBe(
+          `Stryker would skip src/a.js: its mutate entry src/a.js does not match it, because Stryker reads ` +
+            `the project root ${fs.realpathSync(inside)} as a glob: move the project to a path without glob characters\n`,
+        );
+        expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+        expect(fs.existsSync(file('specs/TASK-101/equivalents.md'))).toBe(false);
+      } finally {
+        project = outer;
+      }
+    });
+
+    // Older minimatch versions export the function itself instead of { minimatch }; mutate must call it.
+    // This stand-in matches nothing, so mutate stops before Stryker even though the root is a normal path,
+    // and the message does not blame the root: it has no glob characters.
+    test('an older minimatch that exports a function is the one mutate uses', () => {
+      fs.unlinkSync(file('node_modules/minimatch'));
+      fs.mkdirSync(file('node_modules/minimatch'));
+      fs.writeFileSync(file('node_modules/minimatch/package.json'), JSON.stringify({ name: 'minimatch', version: '3.0.0', main: 'index.js' }));
+      fs.writeFileSync(file('node_modules/minimatch/index.js'), 'module.exports = () => false;\n');
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_GREEN });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      strykerReports({ 'src/a.js': [strykerMutant(1, 'x - 1', 'Killed')] });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(fs.existsSync(file('stryker-calls.json'))).toBe(false);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe('Stryker would skip src/a.js: its mutate entry src/a.js does not match it\n');
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+    });
+
+    // Real Stryker leaves a file with nothing to mutate (only types) out of its report: that is not an error.
+    test('a task file Stryker leaves out of its report passes mutate with a "no mutants" notice and is recorded', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_RED });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      strykerReports({ 'src/a.js': [strykerMutant(1, 'x - 1', 'Killed')], 'src/b.js': null });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.stdout).toContain('no mutants: src/b.js');
+      expect(result.stdout).not.toContain('no mutants: src/a.js');
+      expect(result.status).toBe(0);
+      expect(mutation().noMutants).toEqual(['src/b.js']);
+      expect(mutation().files).toEqual(['src/a.js', 'src/b.js']);
+      expect(result.stdout).toContain('no mutants: src/b.js\nMUTATION: TASK-101 ');
+    });
+
+    test('several task files left out of the report are recorded and printed in sorted order', () => {
+      const C_RED = 'exports.c = () => 0;\n';
+      const C_GREEN = 'exports.c = (x) => x - 3;\n';
+      fs.writeFileSync(file('src/c.js'), C_GREEN);
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_RED, 'src/c.js': C_RED });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN, 'src/c.js': C_GREEN });
+      strykerReports({ 'src/c.js': null, 'src/b.js': null, 'src/a.js': [strykerMutant(1, 'x - 1', 'Killed')] });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.status).toBe(0);
+      expect(mutation().noMutants).toEqual(['src/b.js', 'src/c.js']);
+      expect(result.stdout).toContain('no mutants: src/b.js\nno mutants: src/c.js\nMUTATION: TASK-101 ');
+    });
+
+    test('a run where Stryker reports every task file records noMutants as [] and prints no "no mutants" line', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_RED });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      strykerReports({ 'src/a.js': [strykerMutant(1, 'x - 1', 'Killed')], 'src/b.js': [strykerMutant(1, 'x / 2', 'Killed')] });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.status).toBe(0);
+      expect(mutation().noMutants).toEqual([]);
+      expect(result.stdout).not.toContain('no mutants:');
+    });
+
+    test('mutate fails when Stryker leaves every task file out of its report, and writes no evidence', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_RED });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      strykerReports({ 'src/a.js': null, 'src/b.js': null });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(strykerCalls()).toHaveLength(1);
+      expect(result.status).toBe(1);
+      expect(result.stderr.endsWith('\n')).toBe(true);
+      expect(result.stderr.trimEnd().split('\n')).toHaveLength(1);
+      expect(result.stderr).toBe('Stryker reported none of the task files (src/a.js, src/b.js): see its output above\n');
+      expect(result.stdout).not.toContain('no mutants:');
+      expect(fs.existsSync(file('specs/TASK-101/mutation.json'))).toBe(false);
+      expect(fs.existsSync(file('specs/TASK-101/equivalents.md'))).toBe(false);
+    });
+
+    test('mutate fails when Stryker leaves every task file out of its report, and leaves an earlier mutation.json and equivalents.md untouched', () => {
+      writeEvidence('red', { 'src/a.js': A_RED, 'src/b.js': B_RED });
+      writeEvidence('green', { 'src/a.js': A_GREEN, 'src/b.js': B_GREEN });
+      writeMutation({
+        sourceFiles: hashes({ 'src/a.js': A_GREEN, 'src/b.js': B_GREEN }),
+        testFiles: hashes({ 'test/ab.test.js': TEST }),
+        files: ['src/a.js'],
+        mutants: [{ id: A_SURVIVOR, file: 'src/a.js', line: 1, mutator: 'ArithmeticOperator', replacement: 'x - 1', status: 'Survived' }],
+      });
+      const previousEquivalents = `# Equivalent mutants: TASK-101\n\n### ${A_SURVIVOR}\n- Approved: yes\n- Reason: checked by the human\n`;
+      fs.writeFileSync(file('specs/TASK-101/equivalents.md'), previousEquivalents);
+      const previousMutation = fs.readFileSync(file('specs/TASK-101/mutation.json'), 'utf8');
+      strykerReports({ 'src/a.js': null, 'src/b.js': null });
+
+      const result = runIn(project, 'mutate', 'TASK-101');
+      expect(result.status).toBe(1);
+      expect(result.stderr.endsWith('\n')).toBe(true);
+      expect(result.stderr.trimEnd().split('\n')).toHaveLength(1);
+      expect(fs.readFileSync(file('specs/TASK-101/mutation.json'), 'utf8')).toBe(previousMutation);
+      expect(equivalents()).toBe(previousEquivalents);
     });
 
     test('a Stryker run that writes no report exits 1 without a stack trace', () => {
