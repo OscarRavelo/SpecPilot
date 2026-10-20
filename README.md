@@ -171,6 +171,7 @@ Known limits of `verify` (v0.1):
 - Coverage counts passing tests from the whole repo, not only the task's own test files: AC ids repeat across specs (every task has an `AC-1`), so a test named `AC-2 …` written for another task also covers this task's `AC-2`.
 - `hallucinations.json` is rewritten whole, not atomically: a write that fails part way (for example, a full disk) can cut it short and lose earlier entries, although `verify` still exits 2.
 - The test for a write that fails is skipped when the tests run as root, because root ignores the read-only folder it relies on.
+- If another process corrupts `hallucinations.json` between the check before the tests and the write, `verify` reports it as `Cannot write …: Corrupt hallucinations.json …` (still exit 2, nothing recorded).
 - `hallucinations.json` only has to hold a JSON array to be read; its entries are not checked.
 
 ```bash
