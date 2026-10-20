@@ -49,6 +49,17 @@ Known limits of [`verify`](verify.md#verify-the-false-done-detector) (v0.1):
 - If another process corrupts `hallucinations.json` between the check before the tests and the write, `verify` reports it as `Cannot write …: Corrupt hallucinations.json …` (still exit 2, nothing recorded).
 - `hallucinations.json` only has to hold a JSON array to be read; its entries are not checked.
 
+## Cost and modes
+
+Known limits of [`cost` and `mode`](cost.md):
+
+- A session counts for a task only if it runs a `specpilot` command naming the task. A session that works on the task without running one is not counted, and a session that runs commands for two overlapping tasks is counted for both.
+- Cache writes use one price (the 5-minute one); 1-hour cache writes are undercharged.
+- The default prices leave out Claude Haiku 5.5, whose price depends on prompt size, and any model whose ID was not confirmed on the pricing page. Add them in `.specpilot/prices.json`.
+- The mode in the `cost` report is the current mode, not the one the task ran with.
+- `mode` rewrites every `.claude/agents/*.md`, including agents that are not part of the workflow.
+- The transcript folder name follows Claude Code's current rule; if Claude Code changes it, `cost` reports the folder as missing.
+
 ## Workflow
 
 - The `plan` gate is not implemented yet: `specpilot gate` in `plan` fails with `The plan gate is not implemented yet`.

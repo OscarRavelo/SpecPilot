@@ -18,7 +18,7 @@ AI coding agents are fast, but you can't trust them blindly. Teams adopting spec
 | Problem | How SpecPilot solves it |
 |---|---|
 | **Hallucinations with no safety net.** The agent says a task is done when it isn't. | `specpilot verify` reruns the tests, the mutation gate and AC coverage, blocks the false "done" and records it as a hallucination you can measure. |
-| **Unknown cost.** No view of what each task costs in tokens and money. | Per-task cost tracking is on the roadmap (see How we measure success). |
+| **Unknown cost.** No view of what each task costs in tokens and money. | `specpilot cost <task>` reads the Claude Code transcripts and reports the task's tokens per type, cost in USD and EUR, and latency. `specpilot mode standard\|max` switches every agent between a cheaper and a more capable model. |
 | **A fragile workflow.** A question or correction mid-task knocks the agent out of the spec-driven flow. | Phase hooks and gates the agent cannot talk its way past keep every step (research, grill-me, plan, red, green, verify) in order. |
 
 **Easy to adopt:** clone it, `npm install`, write a spec with Given/When/Then acceptance criteria, and let the gates do the checking. A one-command `specpilot init` setup is coming in v0.1.
@@ -30,6 +30,7 @@ AI coding agents are fast, but you can't trust them blindly. Teams adopting spec
 - **Phase hooks**: Claude Code cannot edit tests or code in the wrong phase, and with `--roles` tests and code are written by two different agents.
 - **TDD with evidence**: red must fail on an assertion, green must pass with the tests byte for byte unchanged.
 - **Tests proven by mutation**: Stryker plus one targeted bug per acceptance criterion; a bug the tests miss sends the task back to red.
+- **Cost and latency per task**: tokens, USD/EUR and time from the Claude Code transcripts, plus Standard/Max modes for the agents' model.
 - **False "done" detector**: `specpilot verify` reruns everything and records a hallucination when the agent's claim does not hold.
 
 ## How it works
@@ -73,6 +74,8 @@ npx specpilot mutate bug TASK-101 AC-1           # check that the tests catch a 
 npx specpilot gate TASK-101                      # close the current phase if its gate passes
 npx specpilot verify TASK-101                    # rerun the checks: move to done, or record a hallucination
 npx specpilot reopen TASK-101 red                # go back (only plan→grill, mutation→red, verify→red)
+npx specpilot cost TASK-101                      # tokens, cost (USD/EUR) and latency of the task; --json for JSON
+npx specpilot mode max                           # set every agent's model (standard or max); no argument prints the mode
 ```
 
 ## Quickstart
@@ -162,7 +165,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 6 | `tdd red` / `tdd green` with evidence | ✅ Done | Red must fail on an assertion; tests cannot change after green |
 | 7 | `mutate`: Stryker plus targeted bugs | ✅ Done | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |
 | 8 | `verify` and the false "done" detector | ✅ Done | A criterion with no test blocks the task and counts as a hallucination |
-| 9 | Cost and latency metrics, Standard/Max modes | — | A known transcript gives exact tokens and € |
+| 9 | Cost and latency metrics, Standard/Max modes | 🟡 In review ([#5](https://github.com/OscarRavelo/SpecPilot/pull/5)) | A known transcript gives exact tokens and € |
 | 10 | `specpilot init` (zero friction) | — | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
 | 11 | Evaluation on ~10 real tasks | — | `specpilot report` fills the success table below |
 
@@ -207,6 +210,7 @@ npm test            # builds dist/ and runs Jest
 - [Phase hooks](docs/hooks.md): what each phase blocks, protected files, Bash detection, the stop hook.
 - [Agent roles](docs/roles.md): `--roles` and the Bash allowlist for `tests-agent` and `code-agent`.
 - [Red, green, mutation and verify](docs/verify.md): evidence files, `mutate`, `mutate bug`, `equivalents.md`, the full `verify` behaviour.
+- [Cost, latency and modes](docs/cost.md): how `cost` finds a task's messages, `prices.json`, rounding, and `mode`.
 - [Known limits](docs/known-limits.md): every known limit of v0.1, by feature.
 
 ## Contributing

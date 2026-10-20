@@ -40,6 +40,9 @@ import {
 } from './mutation';
 import type { MutationEvidence } from './mutation';
 import { acCoverage, readHallucinations, recordHallucination, verifyProblems } from './verify';
+import { costReport } from './cost';
+import { readModeConfig, setMode } from './mode';
+import type { Mode } from './mode';
 import type { ToolUse } from './hooks';
 import type { Evidence, JestReport } from './tdd';
 
@@ -63,6 +66,8 @@ Commands:
   mutate <task>           Run Stryker over the task's code and record the surviving mutants
   mutate bug <task> AC-n  Run the tests against a bug injected for one AC and record whether it was caught
   verify <task>           Run the tests again and check every AC is covered; if so, move to done
+  cost <task> [--json]    Show the tokens, cost and latency of a task, from the Claude Code transcripts
+  mode [standard|max]     Show the mode, or set the model of every project agent
   report                  Summarize cost and quality metrics
 `;
 
@@ -590,6 +595,56 @@ function verify(taskId: string | undefined): number {
   return 0;
 }
 
+const thousands = (count: number) => count.toLocaleString('en-US');
+
+const duration = (ms: number) => {
+  const seconds = Math.floor(ms / 1000);
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
+};
+
+// Errors (missing transcripts, no messages, a model with no price) throw and exit 1 from the catch below.
+function cost(args: string[]): number {
+  const taskId = args[0];
+  if (!taskId || args.length > 2 || (args.length === 2 && args[1] !== '--json')) {
+    console.error('Usage: specpilot cost <task> [--json]');
+    return 1;
+  }
+  if (!openTask(taskId)) return 1;
+
+  const report = costReport(process.cwd(), taskId);
+  if (args[1] === '--json') {
+    console.log(JSON.stringify(report));
+    return 0;
+  }
+  const { tokens } = report;
+  console.log(`${taskId}${report.inProgress ? ' (in progress)' : ''}`);
+  console.log(
+    `Tokens: input ${thousands(tokens.input)}, output ${thousands(tokens.output)}, ` +
+      `cache read ${thousands(tokens.cacheRead)}, cache write ${thousands(tokens.cacheWrite)}`,
+  );
+  console.log(`Cost: ${report.usd.toFixed(2)} USD, ${report.eur.toFixed(2)} EUR`);
+  console.log(`Latency: ${duration(report.latencyMs)}`);
+  console.log(`Mode: ${report.mode}`);
+  console.log(`Prices: ${report.prices.file} (checked ${report.prices.checked})`);
+  return 0;
+}
+
+function mode(args: string[]): number {
+  if (args.length > 1) {
+    console.error('Usage: specpilot mode [standard|max]');
+    return 1;
+  }
+  const root = process.cwd();
+  if (args.length === 0) {
+    console.log(readModeConfig(root).mode);
+    return 0;
+  }
+  const changed = setMode(root, args[0]);
+  console.log(`Mode: ${args[0]} (model: ${readModeConfig(root).modes[args[0] as Mode]})`);
+  for (const file of changed) console.log(`  updated ${path.relative(root, file)}`);
+  return 0;
+}
+
 function main([command, ...args]: string[]): number {
   if (command === '--help' || command === '-h') {
     console.log(HELP);
@@ -610,6 +665,8 @@ function main([command, ...args]: string[]): number {
   if (command === 'reopen') return reopen(args[0], args[1]);
   if (command === 'mutate') return mutate(args);
   if (command === 'verify') return verify(args[0]);
+  if (command === 'cost') return cost(args);
+  if (command === 'mode') return mode(args);
   if (NOT_IMPLEMENTED.includes(command)) {
     console.error(`"${command}" is not implemented yet`);
     return 1;
