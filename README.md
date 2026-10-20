@@ -13,13 +13,15 @@
 
 ## Why SpecPilot
 
-On a real enterprise project, I piloted Spec-Driven Development with AI agents. Two developers shipped at roughly 10x our usual speed. But three problems kept coming up:
+AI coding agents are fast, but you can't trust them blindly. Teams adopting spec-driven development with agents keep hitting the same three problems. SpecPilot solves each one:
 
-1. **Hallucinations with no safety net.** The agent would say a task was done when it wasn't, and nothing checked it automatically.
-2. **No idea what it cost.** We couldn't tell how much each task cost in tokens and money.
-3. **A fragile workflow.** Asking a question or correcting the agent mid-task often knocked it out of the spec-driven flow (research, grill-me, plan, implement).
+| Problem | How SpecPilot solves it |
+|---|---|
+| **Hallucinations with no safety net.** The agent says a task is done when it isn't. | `specpilot verify` reruns the tests, the mutation gate and AC coverage, blocks the false "done" and records it as a hallucination you can measure. |
+| **Unknown cost.** No view of what each task costs in tokens and money. | Per-task cost tracking is on the roadmap (see How we measure success). |
+| **A fragile workflow.** A question or correction mid-task knocks the agent out of the spec-driven flow. | Phase hooks and gates the agent cannot talk its way past keep every step (research, grill-me, plan, red, green, verify) in order. |
 
-SpecPilot puts gates the agent cannot talk its way past between every step, and aims for zero friction: clone it into a project, answer a couple of setup questions, and start working.
+**Easy to adopt:** clone it, `npm install`, write a spec with Given/When/Then acceptance criteria, and let the gates do the checking. A one-command `specpilot init` setup is coming in v0.1.
 
 ## Key features
 
@@ -145,7 +147,7 @@ v0.1 scope (target: December 2026):
 - **Verify** the result against the spec with tests, and flag claims of "done" that don't hold up.
 - **Measure** the cost and latency of every task.
 - Encourage the agent to **ask for context** when it's unsure, instead of guessing.
-- **Two cost modes:** *Standard* minimizes token usage to fit a typical ~$30/month dev plan (our pilot spent ~$300 in one month); *Max* uses the most powerful model when there's no token limit.
+- **Two cost modes:** *Standard* minimizes token usage to fit a typical ~$30/month dev plan; *Max* uses the most powerful model when there's no token limit.
 
 Every step is built with rule #1 on SpecPilot itself: tests first, then code, then injected bugs that the tests must catch.
 
