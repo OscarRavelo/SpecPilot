@@ -928,15 +928,16 @@ describe('stopWarning', () => {
     );
     writeTask('TASK-101', 'verify');
     expect(stopWarning(root)).toBe(
-      'TASK-101 is in verify, so the task is not done: the verify phase cannot be completed yet (specpilot verify is not implemented).',
+      'TASK-101 is in verify, so the task is not done: run specpilot verify TASK-101.',
     );
   });
 
-  test('a task in verify is still reported as not done', () => {
+  test('a task in verify is still reported as not done and told to run specpilot verify', () => {
     writeTask('TASK-101', 'verify');
     const warning = stopWarning(root) as string;
     expect(warning).toContain('TASK-101 is in verify');
-    expect(warning).not.toContain('specpilot mutate is not implemented');
+    expect(warning).toContain('run specpilot verify TASK-101');
+    expect(warning).not.toContain('not implemented');
   });
 
   test('every waiting task is listed', () => {

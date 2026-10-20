@@ -47,7 +47,7 @@ describe('runGate', () => {
     });
   });
 
-  test.each<Phase>(['plan', 'verify'])(
+  test.each<Phase>(['plan'])(
     'the not-yet-implemented %s gate never lets the task through',
     (phase) => {
       fs.writeFileSync(path.join(dir, 'spec.md'), VALID_SPEC);
@@ -57,6 +57,15 @@ describe('runGate', () => {
       });
     },
   );
+
+  // Only specpilot verify moves a task from verify to done; the gate points to it.
+  test('the verify gate never lets the task through and says to run specpilot verify', () => {
+    fs.writeFileSync(path.join(dir, 'spec.md'), VALID_SPEC);
+    const result = runGate(dir, 'verify');
+    expect(result.ok).toBe(false);
+    expect(result.reasons.join('\n')).toContain('run specpilot verify TASK-101');
+    expect(result.reasons.join('\n')).not.toContain('not implemented');
+  });
 
   test('done has no gate', () => {
     expect(runGate(dir, 'done')).toEqual({ ok: false, reasons: ['The task is already done'] });

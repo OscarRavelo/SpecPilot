@@ -608,7 +608,7 @@ export function stopWarning(root: string, taskId?: string): string | null {
     .map((task) =>
       task.phase === 'mutation'
         ? `${task.taskId} is in mutation, so the task is not done: run specpilot mutate ${task.taskId} and specpilot gate ${task.taskId}.`
-        : `${task.taskId} is in verify, so the task is not done: the verify phase cannot be completed yet (specpilot verify is not implemented).`,
+        : `${task.taskId} is in verify, so the task is not done: run specpilot verify ${task.taskId}.`,
     )
     .join(' ');
 }

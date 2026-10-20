@@ -39,8 +39,9 @@ import {
   writeMutationEvidence,
 } from './mutation';
 import type { MutationEvidence } from './mutation';
+import { acCoverage, readHallucinations, recordHallucination, verifyProblems } from './verify';
 import type { ToolUse } from './hooks';
-import type { Evidence } from './tdd';
+import type { Evidence, JestReport } from './tdd';
 
 const SPECS_DIR = 'specs';
 
@@ -61,11 +62,11 @@ Commands:
   tdd red|green <task>    Run the tests and record red / green evidence
   mutate <task>           Run Stryker over the task's code and record the surviving mutants
   mutate bug <task> AC-n  Run the tests against a bug injected for one AC and record whether it was caught
-  verify                  Verify the task against its spec
+  verify <task>           Run the tests again and check every AC is covered; if so, move to done
   report                  Summarize cost and quality metrics
 `;
 
-const NOT_IMPLEMENTED = ['init', 'verify', 'report'];
+const NOT_IMPLEMENTED = ['init', 'report'];
 
 function specLint(file: string | undefined): number {
   if (!file) {
@@ -514,6 +515,75 @@ function mutateBug({ taskId, taskDir, green, root, sourceFiles, testFiles }: Mut
   return 0;
 }
 
+// Verify: the mutation gate again, a fresh test run and a passing test for every AC. A blocked run is
+// recorded as a hallucination. Exit 2 means verify could not run, and nothing is recorded.
+function verify(taskId: string | undefined): number {
+  if (!taskId) {
+    console.error('Usage: specpilot verify <task>');
+    return 2;
+  }
+  // Unlike the other commands, a corrupt or unreadable state.json means verify could not run.
+  let task: ReturnType<typeof openTask>;
+  try {
+    task = openTask(taskId);
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
+  if (!task) return 2;
+
+  const { taskDir, state } = task;
+  if (state.phase !== 'verify') {
+    console.error(`${taskId} is in ${state.phase}: specpilot verify runs only in the verify phase`);
+    return 2;
+  }
+  const specFile = path.join(taskDir, 'spec.md');
+  let specText: string;
+  try {
+    specText = fs.readFileSync(specFile, 'utf8');
+  } catch (err) {
+    console.error(`Cannot read ${specFile}: ${(err as Error).message}`);
+    return 2;
+  }
+  const spec = parseSpec(specText);
+
+  // A corrupt hallucinations.json could not record a blocked run, so it is caught before the tests run.
+  try {
+    readHallucinations(taskDir);
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
+
+  const root = process.cwd();
+  let report: JestReport;
+  try {
+    report = runTests(root);
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
+
+  const problems = verifyProblems(taskDir, root, report, spec);
+  if (problems.length > 0) {
+    recordHallucination(taskDir, { taskId, at: new Date().toISOString(), phase: 'verify', reasons: problems });
+    const file = [SPECS_DIR, taskId, 'hallucinations.json'].join('/');
+    console.error(`VERIFY: ${taskId} blocked, recorded as a hallucination in ${file}`);
+    for (const problem of problems) console.error(`  - ${problem}`);
+    console.error(`Go back with specpilot reopen ${taskId} red`);
+    return 1;
+  }
+
+  const acIds = spec.acceptanceCriteria.map((ac) => ac.id);
+  const coverage = acCoverage(report, acIds);
+  for (const acId of acIds) console.log(`  ✓ ${acId} (${plural(coverage[acId].length, 'test')})`);
+  console.log(`VERIFY: ${taskId} passed`);
+  const next = transition(state, 'done');
+  saveState(taskDir, next);
+  console.log(`${taskId}: ${state.phase} → ${next.phase}`);
+  return 0;
+}
+
 function main([command, ...args]: string[]): number {
   if (command === '--help' || command === '-h') {
     console.log(HELP);
@@ -533,6 +603,7 @@ function main([command, ...args]: string[]): number {
   if (command === 'gate') return gate(args[0]);
   if (command === 'reopen') return reopen(args[0], args[1]);
   if (command === 'mutate') return mutate(args);
+  if (command === 'verify') return verify(args[0]);
   if (NOT_IMPLEMENTED.includes(command)) {
     console.error(`"${command}" is not implemented yet`);
     return 1;
