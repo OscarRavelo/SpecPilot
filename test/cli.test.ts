@@ -41,10 +41,17 @@ describe('specpilot CLI', () => {
     expect(result.stderr).toContain('Unknown command: fly');
   });
 
-  test('a command that is not implemented yet says so and exits 1', () => {
-    const result = run('verify');
+  test('a command that is not implemented yet says so and exits 1, and verify is no longer one', () => {
+    const result = run('report');
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('"verify" is not implemented yet');
+    expect(result.stderr).toContain('"report" is not implemented yet');
+    expect(run('verify').stderr).not.toContain('not implemented');
+  });
+
+  test('--help lists verify <task>', () => {
+    expect(run('--help').stdout.split('\n')).toContain(
+      '  verify <task>           Run the tests again and check every AC is covered; if so, move to done',
+    );
   });
 
   test('spec lint on a valid spec exits 0', () => {
@@ -1356,5 +1363,430 @@ describe('specpilot mutate', () => {
       },
       240_000,
     );
+  });
+});
+
+// A real project in verify: npm test runs Jest, and the evidence of tdd red, tdd green and mutation
+// passes the mutation gate, so what verify adds is the fresh test run and AC coverage.
+describe('specpilot verify', () => {
+  const NODE_MODULES = path.join(__dirname, '..', 'node_modules');
+  const RED_CODE = 'exports.sum = () => 0;\n';
+  const GREEN_CODE = 'exports.sum = (a, b) => a + b;\n';
+  const BUG_CODE = 'exports.sum = (a, b) => a - b;\n';
+  const COVERED_TEST = [
+    "const { sum } = require('../src/sum');",
+    "test('AC-1 adds two numbers', () => { expect(sum(1, 2)).toBe(3); });",
+    "test('AC-1 adds a negative number', () => { expect(sum(1, -2)).toBe(-1); });",
+    "test('AC-2: adds zero', () => { expect(sum(5, 0)).toBe(5); });",
+    "test('keeps the other number AC-2.', () => { expect(sum(0, 7)).toBe(7); });",
+    '',
+  ].join('\n');
+  // AC-2 is only named as part of other ids, so nothing covers it.
+  const UNCOVERED_TEST = [
+    "const { sum } = require('../src/sum');",
+    "test('AC-1 adds two numbers', () => { expect(sum(1, 2)).toBe(3); });",
+    "test('AC-1 adds a negative number', () => { expect(sum(1, -2)).toBe(-1); });",
+    "test('AC-21 adds zero', () => { expect(sum(5, 0)).toBe(5); });",
+    "test('AC-2.1 keeps the other number', () => { expect(sum(0, 7)).toBe(7); });",
+    '',
+  ].join('\n');
+  const HALLUCINATIONS = 'specs/TASK-101/hallucinations.json';
+  let project: string;
+  const file = (name: string) => path.join(project, name);
+  const writeState = (phase: string) =>
+    fs.writeFileSync(file('specs/TASK-101/state.json'), JSON.stringify({ taskId: 'TASK-101', phase, history: [] }));
+  const phaseOf = () => JSON.parse(fs.readFileSync(file('specs/TASK-101/state.json'), 'utf8')).phase;
+  const hallucinations = () => {
+    expect(fs.existsSync(file(HALLUCINATIONS))).toBe(true);
+    return JSON.parse(fs.readFileSync(file(HALLUCINATIONS), 'utf8'));
+  };
+  const evidence = (code: string, testCode: string) => ({
+    taskId: 'TASK-101',
+    at: '2026-10-18T10:00:00.000Z',
+    tests: [],
+    testFiles: { 'test/sum.test.js': sha256(testCode) },
+    sourceFiles: { 'src/sum.js': sha256(code) },
+  });
+  const caughtBug = (ac: string, testCode: string) => ({
+    ac,
+    caught: true,
+    at: '2026-10-18T10:05:00.000Z',
+    sourceFiles: { 'src/sum.js': sha256(BUG_CODE) },
+    testFiles: { 'test/sum.test.js': sha256(testCode) },
+    failing: [`${ac} adds two numbers`],
+  });
+  // A task that went through red, green and mutation with these tests: every mutant killed and a caught
+  // bug for each AC after tdd green.
+  const setUp = (testCode: string) => {
+    fs.writeFileSync(file('test/sum.test.js'), testCode);
+    fs.writeFileSync(file('specs/TASK-101/red.json'), JSON.stringify(evidence(RED_CODE, testCode)));
+    fs.writeFileSync(file('specs/TASK-101/green.json'), JSON.stringify(evidence(GREEN_CODE, testCode)));
+    fs.writeFileSync(
+      file('specs/TASK-101/mutation.json'),
+      JSON.stringify({
+        taskId: 'TASK-101',
+        at: '2026-10-18T10:10:00.000Z',
+        sourceFiles: { 'src/sum.js': sha256(GREEN_CODE) },
+        testFiles: { 'test/sum.test.js': sha256(testCode) },
+        files: ['src/sum.js'],
+        noMutants: [],
+        mutants: [
+          { id: 'src/sum.js:1 ArithmeticOperator a - b', file: 'src/sum.js', line: 1, mutator: 'ArithmeticOperator', replacement: 'a - b', status: 'Killed' },
+        ],
+        bugs: [caughtBug('AC-1', testCode), caughtBug('AC-2', testCode)],
+      }),
+    );
+    writeState('verify');
+  };
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-verify-cli-'));
+    fs.symlinkSync(NODE_MODULES, file('node_modules'));
+    fs.writeFileSync(
+      file('package.json'),
+      JSON.stringify({ name: 'demo', private: true, scripts: { test: 'jest' }, jest: { testEnvironment: 'node' } }),
+    );
+    fs.mkdirSync(file('src'));
+    fs.mkdirSync(file('test'));
+    fs.mkdirSync(file('specs/TASK-101'), { recursive: true });
+    fs.copyFileSync(path.join(SPECS, 'valid.md'), file('specs/TASK-101/spec.md'));
+    fs.writeFileSync(file('src/sum.js'), GREEN_CODE);
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  test('a task whose tests pass and cover every AC moves to done', () => {
+    setUp(COVERED_TEST);
+    const result = runIn(project, 'verify', 'TASK-101');
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toBe(
+      ['  ✓ AC-1 (2 tests)', '  ✓ AC-2 (2 tests)', 'VERIFY: TASK-101 passed', 'TASK-101: verify → done', ''].join('\n'),
+    );
+    expect(result.status).toBe(0);
+    expect(phaseOf()).toBe('done');
+    expect(fs.existsSync(file(HALLUCINATIONS))).toBe(false);
+  });
+
+  test('an AC without a passing test that names it blocks verify and is recorded as a hallucination', () => {
+    setUp(UNCOVERED_TEST);
+    const result = runIn(project, 'verify', 'TASK-101');
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(
+      [
+        'VERIFY: TASK-101 blocked, recorded as a hallucination in specs/TASK-101/hallucinations.json',
+        '  - AC-2 has no test that covers it',
+        'Go back with specpilot reopen TASK-101 red',
+        '',
+      ].join('\n'),
+    );
+    expect(result.status).toBe(1);
+    expect(phaseOf()).toBe('verify');
+    expect(hallucinations()).toEqual([
+      { taskId: 'TASK-101', at: expect.any(String), phase: 'verify', reasons: ['AC-2 has no test that covers it'] },
+    ]);
+    expect(Number.isNaN(Date.parse(hallucinations()[0].at))).toBe(false);
+    const entry = { taskId: 'TASK-101', at: hallucinations()[0].at, phase: 'verify', reasons: ['AC-2 has no test that covers it'] };
+    expect(fs.readFileSync(file(HALLUCINATIONS), 'utf8')).toBe(`${JSON.stringify([entry], null, 2)}\n`);
+  });
+
+  test('every blocked run is appended to hallucinations.json', () => {
+    setUp(UNCOVERED_TEST);
+    expect(runIn(project, 'verify', 'TASK-101').status).toBe(1);
+    expect(runIn(project, 'verify', 'TASK-101').status).toBe(1);
+    expect(hallucinations()).toHaveLength(2);
+    for (const entry of hallucinations()) {
+      expect(entry).toEqual({ taskId: 'TASK-101', at: expect.any(String), phase: 'verify', reasons: ['AC-2 has no test that covers it'] });
+    }
+    expect(phaseOf()).toBe('verify');
+  }, 30_000);
+
+  test('a bug left in the code blocks verify through the mutation gate and the failing tests', () => {
+    setUp(COVERED_TEST);
+    fs.writeFileSync(file('src/sum.js'), BUG_CODE);
+    const result = runIn(project, 'verify', 'TASK-101');
+    expect(result.status).toBe(1);
+    const lines = result.stderr.split('\n');
+    expect(lines[0]).toBe('VERIFY: TASK-101 blocked, recorded as a hallucination in specs/TASK-101/hallucinations.json');
+    expect(lines).toContain('  - Source code differs from tdd green (changed src/sum.js): remove the injected bug');
+    expect(lines).toContain('  - "AC-1 adds two numbers" still fails');
+    expect(lines).toContain('  - AC-1 has no test that covers it');
+    expect(result.stderr.endsWith('Go back with specpilot reopen TASK-101 red\n')).toBe(true);
+    expect(phaseOf()).toBe('verify');
+    expect(hallucinations()[0].reasons).toEqual(
+      expect.arrayContaining([
+        'Source code differs from tdd green (changed src/sum.js): remove the injected bug',
+        '"AC-1 adds two numbers" still fails',
+        'AC-1 has no test that covers it',
+      ]),
+    );
+  });
+
+  test('gate in verify fails and points to specpilot verify', () => {
+    setUp(COVERED_TEST);
+    const result = runIn(project, 'gate', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('run specpilot verify TASK-101');
+    expect(phaseOf()).toBe('verify');
+  });
+
+  // Cannot run: exit 2, one stderr line, nothing recorded.
+  const expectCannotRun = (result: { status: number | null; stdout: string; stderr: string }) => {
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr.endsWith('\n')).toBe(true);
+    expect(result.stderr.trimEnd().split('\n')).toHaveLength(1);
+    expect(fs.existsSync(file(HALLUCINATIONS))).toBe(false);
+  };
+
+  test('verify without a task prints usage and exits 2', () => {
+    setUp(COVERED_TEST);
+    const result = runIn(project, 'verify');
+    expectCannotRun(result);
+    expect(result.stderr).toContain('Usage: specpilot verify <task>');
+  });
+
+  test('verify on a missing task exits 2', () => {
+    setUp(COVERED_TEST);
+    const result = runIn(project, 'verify', 'TASK-404');
+    expectCannotRun(result);
+    expect(result.stderr).toContain('No task TASK-404');
+  });
+
+  test.each(['mutation', 'green', 'done'])('verify on a task in %s exits 2 and leaves the phase alone', (phase) => {
+    setUp(UNCOVERED_TEST);
+    writeState(phase);
+    const result = runIn(project, 'verify', 'TASK-101');
+    expectCannotRun(result);
+    expect(result.stderr).toBe(`TASK-101 is in ${phase}: specpilot verify runs only in the verify phase\n`);
+    expect(phaseOf()).toBe(phase);
+  });
+
+  // A corrupt hallucinations.json is caught before the tests run: exit 2, one line, the file untouched.
+  const CORRUPT_HALLUCINATIONS = 'Corrupt hallucinations.json in specs/TASK-101\n';
+  const expectCorruptHallucinations = (result: { status: number | null; stdout: string; stderr: string }, text: string) => {
+    expect(result.stderr).toBe(CORRUPT_HALLUCINATIONS);
+    expect(result.stdout).toBe('');
+    expect(result.status).toBe(2);
+    expect(fs.readFileSync(file(HALLUCINATIONS), 'utf8')).toBe(text);
+    expect(phaseOf()).toBe('verify');
+  };
+
+  test('a hallucinations.json that is not JSON stops verify with exit 2, even when the task would pass', () => {
+    setUp(COVERED_TEST);
+    const text = '[{"taskId": "TASK-101",';
+    fs.writeFileSync(file(HALLUCINATIONS), text);
+    expectCorruptHallucinations(runIn(project, 'verify', 'TASK-101'), text);
+  });
+
+  test('a hallucinations.json that is not an array stops verify with exit 2, even when the task would be blocked', () => {
+    setUp(UNCOVERED_TEST);
+    const text = '{"taskId": "TASK-101", "reasons": []}\n';
+    fs.writeFileSync(file(HALLUCINATIONS), text);
+    expectCorruptHallucinations(runIn(project, 'verify', 'TASK-101'), text);
+  });
+
+  test('a corrupt hallucinations.json is caught before the tests run', () => {
+    const marker = file('tests-ran.txt');
+    const markingTest = [
+      "require('fs').writeFileSync(" + JSON.stringify(marker) + ", 'ran');",
+      COVERED_TEST,
+    ].join('\n');
+    setUp(markingTest);
+    fs.writeFileSync(file(HALLUCINATIONS), '');
+    expectCorruptHallucinations(runIn(project, 'verify', 'TASK-101'), '');
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  test('a corrupt or unreadable state.json makes verify exit 2 with one line, while gate and status keep exit 1', () => {
+    setUp(COVERED_TEST);
+    const stateFile = file('specs/TASK-101/state.json');
+    const corrupt = () => fs.writeFileSync(stateFile, '{"taskId": "TASK-101", "phase": ');
+    // A directory where state.json should be cannot be read.
+    const unreadable = () => {
+      fs.rmSync(stateFile);
+      fs.mkdirSync(stateFile);
+    };
+    for (const breakState of [corrupt, unreadable]) {
+      breakState();
+      const result = runIn(project, 'verify', 'TASK-101');
+      expectCannotRun(result);
+      expect(result.stderr).toBe('Corrupt state.json in specs/TASK-101\n');
+
+      for (const args of [['gate', 'TASK-101'], ['status']]) {
+        const other = runIn(project, ...args);
+        expect(other.stderr).toBe('Corrupt state.json in specs/TASK-101\n');
+        expect(other.status).toBe(1);
+      }
+      expect(fs.existsSync(file(HALLUCINATIONS))).toBe(false);
+    }
+  }, 30_000);
+
+  test('a spec with no acceptance criteria blocks verify and is recorded as a hallucination', () => {
+    setUp(COVERED_TEST);
+    const spec = fs.readFileSync(path.join(SPECS, 'valid.md'), 'utf8');
+    fs.writeFileSync(file('specs/TASK-101/spec.md'), spec.slice(0, spec.indexOf('### AC-1')));
+    const result = runIn(project, 'verify', 'TASK-101');
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(
+      [
+        'VERIFY: TASK-101 blocked, recorded as a hallucination in specs/TASK-101/hallucinations.json',
+        '  - The spec has no acceptance criteria',
+        'Go back with specpilot reopen TASK-101 red',
+        '',
+      ].join('\n'),
+    );
+    expect(result.status).toBe(1);
+    expect(phaseOf()).toBe('verify');
+    expect(hallucinations()).toEqual([
+      { taskId: 'TASK-101', at: expect.any(String), phase: 'verify', reasons: ['The spec has no acceptance criteria'] },
+    ]);
+  });
+
+  test('a spec.md that cannot be read makes verify exit 2 with one line', () => {
+    setUp(COVERED_TEST);
+    fs.rmSync(file('specs/TASK-101/spec.md'));
+    const result = runIn(project, 'verify', 'TASK-101');
+    expectCannotRun(result);
+    expect(result.stderr.startsWith('Cannot read specs/TASK-101/spec.md: ')).toBe(true);
+    expect(phaseOf()).toBe('verify');
+  });
+
+  test('a test script that writes no Jest report makes verify exit 2 with one line', () => {
+    setUp(COVERED_TEST);
+    fs.writeFileSync(file('package.json'), JSON.stringify({ name: 'demo', private: true, scripts: { test: 'node -e ""' } }));
+    const result = runIn(project, 'verify', 'TASK-101');
+    expectCannotRun(result);
+    expect(result.stderr).toBe(
+      'npm test did not write a Jest JSON report: the "test" script must run jest (e.g. "jest" or "tsc && jest")\n',
+    );
+    expect(phaseOf()).toBe('verify');
+  });
+
+  test('a failing test blocks verify even when its AC is covered by another test', () => {
+    setUp(`${COVERED_TEST}test('AC-2 adds zero twice', () => { expect(sum(0, 0)).toBe(1); });\n`);
+    const result = runIn(project, 'verify', 'TASK-101');
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(
+      [
+        'VERIFY: TASK-101 blocked, recorded as a hallucination in specs/TASK-101/hallucinations.json',
+        '  - "AC-2 adds zero twice" still fails',
+        'Go back with specpilot reopen TASK-101 red',
+        '',
+      ].join('\n'),
+    );
+    expect(result.status).toBe(1);
+    expect(phaseOf()).toBe('verify');
+    expect(hallucinations()[0].reasons).toEqual(['"AC-2 adds zero twice" still fails']);
+  });
+
+  test('a test suite that fails to run blocks verify', () => {
+    setUp(`require('../src/missing');\n${COVERED_TEST}`);
+    const result = runIn(project, 'verify', 'TASK-101');
+    expect(result.stdout).toBe('');
+    expect(result.status).toBe(1);
+    expect(result.stderr.split('\n')[0]).toBe(
+      'VERIFY: TASK-101 blocked, recorded as a hallucination in specs/TASK-101/hallucinations.json',
+    );
+    expect(phaseOf()).toBe('verify');
+    const { reasons } = hallucinations()[0];
+    expect(reasons.some((reason: string) => reason.startsWith("test/sum.test.js failed to run: Cannot find module '../src/missing'"))).toBe(true);
+    expect(reasons).toEqual(expect.arrayContaining(['AC-1 has no test that covers it', 'AC-2 has no test that covers it']));
+  });
+
+  test.each(['green.json', 'mutation.json'])('a corrupt %s blocks verify through the mutation gate', (name) => {
+    setUp(COVERED_TEST);
+    fs.writeFileSync(file(`specs/TASK-101/${name}`), '{');
+    const result = runIn(project, 'verify', 'TASK-101');
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr.split('\n')[0]).toBe(
+      'VERIFY: TASK-101 blocked, recorded as a hallucination in specs/TASK-101/hallucinations.json',
+    );
+    expect(phaseOf()).toBe('verify');
+    expect(hallucinations()[0].reasons).toContain(`Corrupt ${name} in specs/TASK-101`);
+  });
+
+  test('tests changed after tdd green block verify through the mutation gate', () => {
+    setUp(COVERED_TEST);
+    fs.writeFileSync(file('test/sum.test.js'), `${COVERED_TEST}// changed\n`);
+    const result = runIn(project, 'verify', 'TASK-101');
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(
+      [
+        'VERIFY: TASK-101 blocked, recorded as a hallucination in specs/TASK-101/hallucinations.json',
+        '  - Tests changed after tdd green (changed test/sum.test.js): go back with specpilot reopen TASK-101 red',
+        'Go back with specpilot reopen TASK-101 red',
+        '',
+      ].join('\n'),
+    );
+    expect(result.status).toBe(1);
+    expect(phaseOf()).toBe('verify');
+  });
+
+  // Root ignores file permissions, so a read-only folder cannot make the write fail there.
+  const testUnlessRoot = process.getuid?.() === 0 ? test.skip : test;
+  testUnlessRoot('a blocked verify that cannot write hallucinations.json exits 2 with one line and records nothing', () => {
+    setUp(UNCOVERED_TEST);
+    const taskDir = file('specs/TASK-101');
+    // Everything verify reads is in place and hallucinations.json does not exist, so only the write fails.
+    fs.chmodSync(taskDir, 0o555);
+    let result: { status: number | null; stdout: string; stderr: string };
+    try {
+      result = runIn(project, 'verify', 'TASK-101');
+    } finally {
+      fs.chmodSync(taskDir, 0o755);
+    }
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr.endsWith('\n')).toBe(true);
+    const lines = result.stderr.trimEnd().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].startsWith('Cannot write specs/TASK-101/hallucinations.json: ')).toBe(true);
+    expect(lines[0]).toMatch(/EACCES|EPERM|permission/i);
+    expect(fs.existsSync(file(HALLUCINATIONS))).toBe(false);
+    expect(phaseOf()).toBe('verify');
+  });
+
+  test('earlier hallucinations are kept: a blocked run appends, a passing run leaves the file as it was', () => {
+    const earlier = { taskId: 'TASK-101', at: '2026-10-19T09:00:00.000Z', phase: 'verify', reasons: ['AC-1 has no test that covers it'] };
+    setUp(UNCOVERED_TEST);
+    fs.writeFileSync(file(HALLUCINATIONS), `${JSON.stringify([earlier], null, 2)}\n`);
+    expect(runIn(project, 'verify', 'TASK-101').status).toBe(1);
+    expect(hallucinations()).toEqual([
+      earlier,
+      { taskId: 'TASK-101', at: expect.any(String), phase: 'verify', reasons: ['AC-2 has no test that covers it'] },
+    ]);
+
+    setUp(COVERED_TEST);
+    const before = fs.readFileSync(file(HALLUCINATIONS), 'utf8');
+    expect(runIn(project, 'verify', 'TASK-101').status).toBe(0);
+    expect(fs.readFileSync(file(HALLUCINATIONS), 'utf8')).toBe(before);
+    expect(phaseOf()).toBe('done');
+  }, 30_000);
+
+  test('a passing verify adds verify → done to the history, and one test per AC is singular', () => {
+    const oneEach = [
+      "const { sum } = require('../src/sum');",
+      "test('AC-1 adds two numbers', () => { expect(sum(1, 2)).toBe(3); });",
+      "test('AC-2 adds zero', () => { expect(sum(5, 0)).toBe(5); });",
+      '',
+    ].join('\n');
+    setUp(oneEach);
+    const earlier = { from: 'mutation', to: 'verify', at: '2026-10-18T10:20:00.000Z' };
+    fs.writeFileSync(
+      file('specs/TASK-101/state.json'),
+      JSON.stringify({ taskId: 'TASK-101', phase: 'verify', history: [earlier] }),
+    );
+    const result = runIn(project, 'verify', 'TASK-101');
+    expect(result.stdout).toBe(
+      ['  ✓ AC-1 (1 test)', '  ✓ AC-2 (1 test)', 'VERIFY: TASK-101 passed', 'TASK-101: verify → done', ''].join('\n'),
+    );
+    expect(result.status).toBe(0);
+    const state = JSON.parse(fs.readFileSync(file('specs/TASK-101/state.json'), 'utf8'));
+    expect(state).toEqual({
+      taskId: 'TASK-101',
+      phase: 'done',
+      history: [earlier, { from: 'verify', to: 'done', at: expect.any(String) }],
+    });
+    expect(Number.isNaN(Date.parse(state.history[1].at))).toBe(false);
   });
 });

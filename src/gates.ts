@@ -195,12 +195,18 @@ function mutationGate(taskDir: string, projectRoot: string): GateResult {
   return reasons.length === 0 ? pass() : fail(...reasons);
 }
 
+// Only specpilot verify moves a task from verify to done: it runs the tests again, so a gate cannot.
+function verifyGate(taskDir: string): GateResult {
+  return fail(`run specpilot verify ${path.basename(taskDir)}`);
+}
+
 const GATES: Partial<Record<Phase, Gate>> = {
   research: researchGate,
   grill: grillGate,
   red: redGate,
   green: greenGate,
   mutation: mutationGate,
+  verify: verifyGate,
 };
 
 // Checks whether the current phase can be closed. A phase without an implemented gate never passes.

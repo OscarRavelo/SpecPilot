@@ -29,6 +29,13 @@ Developers on multi-person teams in large companies, where work arrives as small
 
 - **Two cost modes:** *Standard* minimizes token usage to fit a typical ~$30/month dev plan (our pilot spent ~$300 in one month); *Max* uses the most powerful model when there's no token limit.
 
+## Ground rules
+
+1. **Acceptance criteria must be well written:** each AC is testable, with a clear Given/When/Then and concrete values. If it can't be tested, it's badly written.
+2. **A human reviews the tests written from the ACs (human in the loop):** SpecPilot checks the evidence (each AC has a passing test that caught a real bug), but only a person can confirm a test really checks what its AC says.
+
+Following both rules plus SpecPilot's gates is what makes the result trustworthy.
+
 ## Harness
 
 Stack assumed in target projects: **React + TypeScript** front end, **Node + TypeScript** back end, **Jest** tests (versions depend on the project).
@@ -110,7 +117,7 @@ Known limits of the Bash allowlist:
 - Read-only `git` commands follow the repository's git config (external diff, textconv, fsmonitor), so they are only safe while agents cannot edit `.git/config`.
 - Not covered by design: glob characters inside double quotes, a lone `]`, `~` expansion, and extglob. `echo`, `printf`, `pwd`, `true` and `which` take any arguments; only their redirections are checked.
 
-The same template registers `specpilot hook stop`, which runs whenever the agent stops. It does not block (that could leave the agent looping), but it shows a system message for every task in `mutation` or `verify`, e.g. `TASK-101 is in mutation, so the task is not done: run specpilot mutate TASK-101 and specpilot gate TASK-101.` Blocking a false "done" claim is part of step 8 (`verify`).
+The same template registers `specpilot hook stop`, which runs whenever the agent stops. It does not block (that could leave the agent looping), but it shows a system message for every task in `mutation` or `verify`, e.g. `TASK-101 is in mutation, so the task is not done: run specpilot mutate TASK-101 and specpilot gate TASK-101.` or `TASK-101 is in verify, so the task is not done: run specpilot verify TASK-101.` A false "done" claim is blocked by `specpilot verify`, which records it as a hallucination.
 
 `specpilot tdd red <task>` and `specpilot tdd green <task>` run the project's tests with `npm test -- --json --outputFile=<tmp>` (so the `test` script must end with `jest`, e.g. `"jest"` or `"tsc && jest"`) and record evidence next to the spec:
 
@@ -143,6 +150,30 @@ Known limits of the files `mutate` passes to Stryker:
 - `mutation.json` checks only that `noMutants` is a list, not that each item is a path (the same loose check as `files`).
 - On POSIX, a backslash in a file name is turned into `/` by Stryker, so the entry can also match another file.
 - Stryker always ignores `node_modules` (in any letter case) and symlinked files, and SpecPilot never hashes code under `dist/`, `build/`, `coverage/`, `reports/` or symlinks, so task code there is never mutated.
+
+### Verify: the false "done" detector
+
+**`specpilot verify <task>`** is the only way from `verify` to `done` (`specpilot gate` in `verify` just says to run it). It reruns the checks itself instead of trusting the agent's claim:
+
+1. the `mutation` gate again (code and tests byte for byte the green version, Stryker evidence fresh, survivors approved, a caught bug for every acceptance criterion);
+2. a fresh `npm test`, where every suite must run and every test pass;
+3. coverage of every acceptance criterion: each `AC-n` in the spec needs at least one **passing** test whose name holds `AC-n` as a whole id (the same rule as `mutate bug`: `AC-1` is not `AC-12` or `AC-1.2`).
+
+If everything holds, it prints one `✓ AC-n (k tests)` line per criterion, moves the task to `done` and exits 0. If anything fails, the agent claimed done when it was not: the task stays in `verify`, the reasons are appended as a hallucination to `specs/<task>/hallucinations.json` (never truncated), and `verify` exits 1 with `Go back with specpilot reopen <task> red`. A spec with no acceptance criteria also blocks the task. When `verify` cannot run at all (wrong usage, no such task, a phase other than `verify`, a corrupt `state.json`, an unreadable spec, a corrupt `hallucinations.json`, checked before the tests run, no Jest report, or a blocked run whose `hallucinations.json` cannot be written, e.g. `Cannot write specs/TASK-101/hallucinations.json: EACCES: permission denied, …`), it prints one line, records nothing and exits 2.
+
+Known limits of `verify` (v0.1):
+
+- Coverage is by name only: a test with `AC-n` in its name covers that criterion even if its assertions check something else. That is why a human reviews the tests (see the ground rules).
+- `verify` does not run Stryker again; it only checks that the mutation evidence still matches the code and tests.
+- Nothing protects `hallucinations.json`: an agent could edit or delete it.
+- Only `verify` records hallucinations; a failing `gate` in an earlier phase is not counted as one.
+- Hallucinations are not aggregated or reported yet (step 11, `specpilot report`).
+- Coverage counts passing tests from the whole repo, not only the task's own test files: AC ids repeat across specs (every task has an `AC-1`), so a test named `AC-2 …` written for another task also covers this task's `AC-2`.
+- `hallucinations.json` is rewritten whole, not atomically: a write that fails part way (for example, a full disk) can cut it short and lose earlier entries, although `verify` still exits 2.
+- The test for a write that fails is skipped when the tests run as root, because root ignores the read-only folder it relies on.
+- If another process corrupts `hallucinations.json` between the check before the tests and the write, `verify` reports it as `Cannot write …: Corrupt hallucinations.json …` (still exit 2, nothing recorded).
+- `hallucinations.json` only has to hold a JSON array to be read; its entries are not checked.
+
 ```bash
 npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
 npx specpilot ledger check TASK-101              # check every citation in the grill ledger
@@ -154,6 +185,7 @@ npx specpilot tdd green TASK-101                 # record that all tests pass, u
 npx specpilot mutate TASK-101                    # run Stryker over the task's code
 npx specpilot mutate bug TASK-101 AC-1           # check that the tests catch a bug injected for AC-1
 npx specpilot gate TASK-101                      # close the current phase if its gate passes
+npx specpilot verify TASK-101                    # rerun the checks: move to done, or record a hallucination
 npx specpilot reopen TASK-101 red                # go back (only plan→grill, mutation→red, verify→red)
 ```
 
@@ -171,7 +203,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 5 | Phase hooks in Claude Code | ✅ Done | Editing code before the red phase is blocked |
 | 6 | `tdd red` / `tdd green` with evidence | ✅ Done | Red must fail on an assertion; tests cannot change after green |
 | 7 | `mutate`: Stryker plus targeted bugs | ✅ Done | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |
-| 8 | `verify` and the false "done" detector | — | A criterion with no test blocks the task and counts as a hallucination |
+| 8 | `verify` and the false "done" detector | ✅ Done | A criterion with no test blocks the task and counts as a hallucination |
 | 9 | Cost and latency metrics, Standard/Max modes | — | A known transcript gives exact tokens and € |
 | 10 | `specpilot init` (zero friction) | — | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
 | 11 | Evaluation on ~10 real tasks | — | `specpilot report` fills the success table below |

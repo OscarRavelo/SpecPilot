@@ -292,17 +292,21 @@ export function unapprovedSurvivors(mutants: Mutant[], equivalents: Equivalent[]
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// A test name names an AC only as a whole id. AC-1 is not AC-12, AC-1x, AC-1.2, AC-1-x or XAC-1, but a
+// sentence may end right after it ("adds AC-1.").
+export function namesAc(testName: string, acId: string): boolean {
+  return new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(acId)}(?![A-Za-z0-9]|[.-][A-Za-z0-9])`).test(testName);
+}
+
 // A targeted bug is caught only if every suite ran (a bug that does not compile proves nothing) and a
-// test with the AC in its name, as a whole id, fails on an assertion. AC-1 is not AC-12, AC-1x, AC-1.2, AC-1-x
-// or XAC-1, but a sentence may end right after it ("adds AC-1.").
+// test that names the AC fails on an assertion.
 export function bugProblems(report: JestReport, acId: string, root: string): string[] {
   const broken = brokenSuites(report, root);
   if (broken.length > 0) return [...broken, 'A suite that fails to run does not catch a bug'];
 
-  const named = new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(acId)}(?![A-Za-z0-9]|[.-][A-Za-z0-9])`);
   const caught = report.testResults
     .flatMap((suite) => suite.assertionResults)
-    .some((test) => test.status === 'failed' && named.test(test.fullName) && failsOnAssertion(test));
+    .some((test) => test.status === 'failed' && namesAc(test.fullName, acId) && failsOnAssertion(test));
   return caught ? [] : [`No test with ${acId} in its name fails on an assertion`];
 }
 

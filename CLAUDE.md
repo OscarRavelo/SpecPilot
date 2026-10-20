@@ -11,6 +11,8 @@ It is a TypeScript CLI: sources in `src/`, compiled to `dist/`, tests in `test/*
 4. `tests-agent` reruns the tests and reviews the result.
 5. The human approves the final merge.
 
+Never run tests-agent and code-agent at the same time. Each step waits for the previous one to finish; any new test, including pinning tests, is written and run before code-agent starts the next green step.
+
 ## Hard rules
 
 - Nobody marks a task done without running `npm test` and showing the output.
