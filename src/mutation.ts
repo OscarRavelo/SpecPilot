@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
+import { createRequire } from 'module';
 import { brokenSuites, failsOnAssertion } from './tdd';
 import type { JestReport } from './tdd';
 
@@ -39,12 +40,14 @@ export interface BugRecord {
 
 // What specpilot mutate saw: the Stryker mutants and the targeted bugs, with hashes of the code they ran on.
 // files is every file mutated so far (sorted); mutation.json written before it was stored has none.
+// noMutants is the task files Stryker left out of its report (sorted), such as a file with only types.
 export interface MutationEvidence {
   taskId: string;
   at: string;
   sourceFiles: Record<string, string>;
   testFiles: Record<string, string>;
   files?: string[];
+  noMutants?: string[];
   mutants: Mutant[];
   bugs: BugRecord[];
 }
@@ -104,6 +107,47 @@ export function strykerFileProblem(files: string[]): string | null {
   return null;
 }
 
+type Minimatch = (file: string, pattern: string, options: { dot: boolean }) => boolean;
+
+// Stryker's FileMatcher is ESM and not exported, so its rule is applied here with the minimatch Stryker
+// itself loads. Older minimatch versions export the function itself instead of { minimatch }.
+function strykerMinimatch(root: string): Minimatch {
+  const manifest = installedManifest(root, STRYKER);
+  if (!manifest) throw new Error(`Stryker is not installed in this project: run ${INSTALL}`);
+  const loaded = createRequire(manifest)('minimatch') as Minimatch | { minimatch: Minimatch };
+  return typeof loaded === 'function' ? loaded : loaded.minimatch;
+}
+
+// Why Stryker would skip one of the given files, or null if each mutate entry matches its file. Stryker
+// matches each entry with new FileMatcher(entry, false): the entry and the file are both resolved against
+// the project root, backslashes become "/", and minimatch runs with dot: false. The root is not escaped,
+// so a glob character in it (such as "[x]" in a folder above the files) makes the entry match nothing.
+// The root is only blamed when it holds such a character; otherwise the mismatch has another cause.
+export function strykerMatchProblem(root: string, files: string[]): string | null {
+  const minimatch = strykerMinimatch(root);
+  const resolved = (name: string) => path.resolve(root, name).replace(/\\/g, '/');
+  for (const file of files) {
+    const entry = exactFileGlob(file);
+    if (!minimatch(resolved(file), resolved(entry), { dot: false })) {
+      const problem = `Stryker would skip ${file}: its mutate entry ${entry} does not match it`;
+      if (!/[*?[\]{}(),!]/.test(root)) return problem;
+      return (
+        `${problem}, because Stryker reads the project root ${root} as a glob: move the project to a ` +
+        'path without glob characters'
+      );
+    }
+  }
+  return null;
+}
+
+// The report keys files like parseStrykerReport reads them; a file with nothing to mutate (only types)
+// is left out of it.
+export function filesMissingFromReport(report: unknown, root: string, files: string[]): string[] {
+  const reported = (report as { files?: Record<string, unknown> } | null)?.files ?? {};
+  const keys = new Set(Object.keys(reported).map((name) => path.relative(root, path.resolve(root, name)).split(path.sep).join('/')));
+  return files.filter((file) => !keys.has(file));
+}
+
 // The TypeScript checker needs a tsconfig.json; a plain-JS project gets no checker.
 export function strykerConfig(files: string[], reportFile: string, root: string): Record<string, unknown> {
   const problem = strykerFileProblem(files);
@@ -122,13 +166,14 @@ export function strykerConfig(files: string[], reportFile: string, root: string)
   };
 }
 
-// Node's own lookup: node_modules in the root or any folder above it.
-function installed(root: string, name: string): boolean {
+// Node's own lookup: node_modules in the root or any folder above it. Returns the package.json found, or null.
+function installedManifest(root: string, name: string): string | null {
   let dir = path.resolve(root);
   for (;;) {
-    if (fs.existsSync(path.join(dir, 'node_modules', name, 'package.json'))) return true;
+    const manifest = path.join(dir, 'node_modules', name, 'package.json');
+    if (fs.existsSync(manifest)) return manifest;
     const parent = path.dirname(dir);
-    if (parent === dir) return false;
+    if (parent === dir) return null;
     dir = parent;
   }
 }
@@ -143,7 +188,7 @@ export function nodeVersionProblem(version: string): string | null {
 // Runs Stryker over the given files and returns its parsed JSON report. Stryker's own output (the
 // clear-text table of survivors) goes straight to the terminal.
 export function runStryker(root: string, files: string[]): unknown {
-  if (!installed(root, STRYKER)) {
+  if (!installedManifest(root, STRYKER)) {
     throw new Error(`Stryker is not installed in this project: run ${INSTALL}`);
   }
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-stryker-'));
@@ -303,7 +348,8 @@ export function readMutationEvidence(taskDir: string): MutationEvidence | null {
     !evidence.mutants.every(isMutant) ||
     !Array.isArray(evidence.bugs) ||
     !evidence.bugs.every(isBugRecord) ||
-    (evidence.files !== undefined && !Array.isArray(evidence.files))
+    (evidence.files !== undefined && !Array.isArray(evidence.files)) ||
+    (evidence.noMutants !== undefined && !Array.isArray(evidence.noMutants))
   ) {
     throw new Error(`Corrupt mutation.json in ${taskDir}`);
   }

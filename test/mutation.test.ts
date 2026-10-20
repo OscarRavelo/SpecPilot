@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import {
   bugProblems,
+  filesMissingFromReport,
   mutantId,
   nodeVersionProblem,
   parseEquivalents,
@@ -11,6 +12,7 @@ import {
   renderEquivalents,
   runStryker,
   strykerConfig,
+  strykerMatchProblem,
   survivors,
   unapprovedSurvivors,
   writeMutationEvidence,
@@ -215,6 +217,100 @@ describe('strykerConfig', () => {
       expect(() => configFor(files, '/tmp/out/report.json', root)).toThrow(/hidden/);
       expect(() => configFor(files, '/tmp/out/report.json', root)).toThrow(name);
     });
+  });
+});
+
+// Stryker matches each mutate entry with new FileMatcher(entry, false): both the entry and the file are
+// resolved against the project root, so glob characters in the root itself break the match.
+describe('strykerMatchProblem', () => {
+  const NODE_MODULES = path.join(__dirname, '..', 'node_modules');
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-stryker-match-'));
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // A project with this repo's real Stryker (and the minimatch it loads) installed.
+  const projectAt = (root: string) => {
+    fs.mkdirSync(root, { recursive: true });
+    fs.symlinkSync(NODE_MODULES, path.join(root, 'node_modules'), 'dir');
+    return root;
+  };
+
+  test('a normal project root gives no problem, even for files with escaped glob characters', () => {
+    const root = projectAt(path.join(dir, 'app'));
+    expect(strykerMatchProblem(root, ['src/a.ts', 'src/[id].ts', 'src/b.ts'])).toBeNull();
+  });
+
+  test('a project root with "[" in its path gives a one-line message naming the file', () => {
+    const root = projectAt(path.join(dir, 'dir[x]', 'app'));
+    const problem = strykerMatchProblem(root, ['src/a.ts', 'src/b.ts']);
+    expect(typeof problem).toBe('string');
+    expect(problem).toContain('src/a.ts');
+    expect(problem).not.toContain('\n');
+  });
+
+  test('the message names only the first file Stryker would skip, with its entry and the root', () => {
+    const root = projectAt(path.join(dir, 'dir[x]', 'app'));
+    expect(strykerMatchProblem(root, ['src/a.ts', 'src/b.ts'])).toBe(
+      `Stryker would skip src/a.ts: its mutate entry src/a.ts does not match it, because Stryker reads ` +
+        `the project root ${root} as a glob: move the project to a path without glob characters`,
+    );
+  });
+
+  // A stand-in Stryker whose minimatch never matches, under a root without glob characters: the message
+  // names the file and its entry, but does not blame the root or ask to move the project.
+  test('a normal root whose minimatch never matches gives a message that does not mention the root', () => {
+    const root = path.join(dir, 'app');
+    const modules = path.join(root, 'node_modules');
+    fs.mkdirSync(path.join(modules, '@stryker-mutator', 'core'), { recursive: true });
+    fs.writeFileSync(
+      path.join(modules, '@stryker-mutator', 'core', 'package.json'),
+      JSON.stringify({ name: '@stryker-mutator/core', version: '9.0.0' }),
+    );
+    fs.mkdirSync(path.join(modules, 'minimatch'));
+    fs.writeFileSync(
+      path.join(modules, 'minimatch', 'package.json'),
+      JSON.stringify({ name: 'minimatch', version: '3.0.0', main: 'index.js' }),
+    );
+    fs.writeFileSync(path.join(modules, 'minimatch', 'index.js'), 'module.exports = () => false;\n');
+
+    expect(strykerMatchProblem(root, ['src/a.ts', 'src/b.ts'])).toBe(
+      'Stryker would skip src/a.ts: its mutate entry src/a.ts does not match it',
+    );
+  });
+
+  test('without Stryker installed it says how to install it', () => {
+    expect(() => strykerMatchProblem(dir, ['src/a.js'])).toThrow(
+      'Stryker is not installed in this project: run npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker',
+    );
+  });
+});
+
+// Real Stryker leaves a file with nothing to mutate (only types) out of report.json.
+describe('filesMissingFromReport', () => {
+  test('a task file that is not a key of the report files is missing', () => {
+    const report = { files: { 'src/a.ts': { mutants: [] } } };
+    expect(filesMissingFromReport(report, ROOT, ['src/a.ts', 'src/b.ts'])).toEqual(['src/b.ts']);
+  });
+
+  test('a file present with zero mutants is not missing; an absent one is', () => {
+    const report = { files: { 'src/a.ts': { language: 'typescript', source: '' }, 'src/b.ts': { mutants: [] } } };
+    expect(filesMissingFromReport(report, ROOT, ['src/a.ts', 'src/b.ts', 'src/types.ts'])).toEqual(['src/types.ts']);
+  });
+
+  test('absolute report keys are matched like relative ones', () => {
+    const report = { files: { [path.join(ROOT, 'src', 'deep', 'a.ts')]: { mutants: [] } } };
+    expect(filesMissingFromReport(report, ROOT, ['src/b.ts', 'src/deep/a.ts'])).toEqual(['src/b.ts']);
+  });
+
+  test('relative report keys are normalized, so ./src/a.ts is src/a.ts', () => {
+    const report = { files: { './src/a.ts': { mutants: [] }, 'src/x/../b.ts': { mutants: [] } } };
+    expect(filesMissingFromReport(report, ROOT, ['src/a.ts', 'src/b.ts', 'src/c.ts'])).toEqual(['src/c.ts']);
+  });
+
+  test('every task file is missing from a report with no files', () => {
+    expect(filesMissingFromReport({ files: {} }, ROOT, ['src/a.ts', 'src/b.ts'])).toEqual(['src/a.ts', 'src/b.ts']);
   });
 });
 
@@ -586,6 +682,22 @@ describe('mutation.json', () => {
     expect(fs.existsSync(path.join(dir, 'mutation.json'))).toBe(true);
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'mutation.json'), 'utf8'))).toEqual(evidence);
     expect(readMutationEvidence(dir)).toEqual(evidence);
+  });
+
+  test('noMutants round-trips through mutation.json', () => {
+    const withNoMutants: MutationEvidence = { ...evidence, files: ['src/sum.ts', 'src/types.ts'], noMutants: ['src/types.ts'] };
+    writeMutationEvidence(dir, withNoMutants);
+    expect(readMutationEvidence(dir)).toEqual(withNoMutants);
+    expect(readMutationEvidence(dir)?.noMutants).toEqual(['src/types.ts']);
+  });
+
+  test.each<[string, unknown]>([
+    ['a string', 'src/types.ts'],
+    ['null', null],
+    ['an object', { 'src/types.ts': true }],
+  ])('mutation.json is corrupt when noMutants is %s', (_, noMutants) => {
+    fs.writeFileSync(path.join(dir, 'mutation.json'), JSON.stringify({ ...evidence, noMutants }));
+    expect(() => readMutationEvidence(dir)).toThrow(`Corrupt mutation.json in ${dir}`);
   });
 
   test('a corrupt mutation.json is an error, not missing evidence', () => {
