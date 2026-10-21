@@ -201,6 +201,25 @@ describe('setMode', () => {
     expect(snapshot()).toEqual(before);
   });
 
+  test('AC-15: an unknown mode prints exactly "Unknown mode: turbo (valid modes: standard, max)"', () => {
+    const expected = 'Unknown mode: turbo (valid modes: standard, max)';
+    const messageOf = (run: () => unknown): string => {
+      let error: unknown;
+      try {
+        run();
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toBeInstanceOf(Error);
+      return (error as Error).message;
+    };
+    expect(messageOf(() => setMode(project, 'turbo'))).toBe(expected);
+
+    fs.mkdirSync(path.join(project, '.specpilot'));
+    fs.writeFileSync(path.join(project, '.specpilot', 'config.json'), JSON.stringify({ mode: 'turbo' }));
+    expect(messageOf(() => readModeConfig(project))).toBe(expected);
+  });
+
   test('AC-14: an agent file with no frontmatter makes mode fail and no file changes (all or nothing)', () => {
     fs.writeFileSync(path.join(agents(), 'z-broken.md'), 'No frontmatter here.\n');
     const before = snapshot();

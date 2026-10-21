@@ -24,8 +24,10 @@ import {
   assistant,
   at,
   bang,
+  fileHistorySnapshotLine,
   flatPrice,
   jsonl,
+  permissionModeLine,
   makeSandbox,
   MODEL,
   removeSandbox,
@@ -146,6 +148,13 @@ describe('runsTaskCommand', () => {
     ]);
     expect(runsTaskCommand(prose, 'TASK-1')).toBe(false);
     expect(runsTaskCommand(jsonl([bang('npx specpilot gate TASK-1')]), 'TASK-1')).toBe(true);
+  });
+
+  test('AC-4: a task id with a regex character (fix-1.2) finds the session that ran specpilot gate fix-1.2', () => {
+    expect(runsTaskCommand(viaBash('npx specpilot gate fix-1.2'), 'fix-1.2')).toBe(true);
+    expect(runsTaskCommand(jsonl([bang('npx specpilot gate fix-1.2')]), 'fix-1.2')).toBe(true);
+    // The dot is escaped, so it matches only a dot.
+    expect(runsTaskCommand(viaBash('npx specpilot gate fix-1x2'), 'fix-1.2')).toBe(false);
   });
 });
 
@@ -487,6 +496,24 @@ describe('costReport', () => {
       assistant({ id: 'm_b', at: at('10:30:00.000'), sessionId: 'sess-b', input: 32 }),
     ]);
     expect(costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home).tokens.input).toBe(14);
+  });
+
+  test('AC-4: a task session whose transcript also holds lines without a message (permission-mode, file-history-snapshot) is still counted', () => {
+    writeState(box.project, TASK, 'done', [at('10:00:00.000'), at('11:00:00.000')]);
+    writePrices(box.project);
+    const session = [
+      permissionModeLine(),
+      fileHistorySnapshotLine('m0'),
+      bang('npx specpilot gate TASK-1'),
+      permissionModeLine(),
+      fileHistorySnapshotLine('m1'),
+      assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 }),
+      fileHistorySnapshotLine('m2'),
+    ];
+    writeTranscript(box.dir, 'sess-a.jsonl', session);
+    expect(runsTaskCommand(jsonl(session), TASK)).toBe(true);
+    expect(totalTokens(taskMessages(box.dir, TASK)).input).toBe(5);
+    expect(costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home).tokens.input).toBe(5);
   });
 
   test('AC-5: an unfinished task counts messages up to now and is in progress', () => {

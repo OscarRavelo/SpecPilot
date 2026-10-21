@@ -67,6 +67,13 @@ export function bang(command: string, sessionId = 'sess-a', when = at('09:00:00.
   });
 }
 
+// Main transcripts also hold lines with no `message` key; two handmade ones with minimal fields.
+export const permissionModeLine = (sessionId = 'sess-a') =>
+  JSON.stringify({ type: 'permission-mode', permissionMode: 'default', sessionId });
+
+export const fileHistorySnapshotLine = (messageId = 'm0') =>
+  JSON.stringify({ type: 'file-history-snapshot', messageId, snapshot: {}, isSnapshotUpdate: false });
+
 export const jsonl = (lines: string[]) => `${lines.join('\n')}\n`;
 
 // The transcript folder name computed independently of src/: every non-alphanumeric character becomes '-'.

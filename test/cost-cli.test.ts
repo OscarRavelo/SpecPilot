@@ -6,10 +6,12 @@ import {
   assistant,
   at,
   bang,
+  fileHistorySnapshotLine,
   flatPrice,
   folderName,
   makeSandbox,
   MODEL,
+  permissionModeLine,
   removeSandbox,
   seedDoneTask,
   TASK,
@@ -114,6 +116,38 @@ describe('specpilot cost', () => {
       assistant({ id: 'm_b', at: at('10:30:00.000'), sessionId: 'sess-b', input: 32 }),
     ]);
     expect(json().tokens.input).toBe(14);
+  });
+
+  test('AC-4: a task session whose transcript also holds lines without a message (permission-mode, file-history-snapshot) is still counted', () => {
+    writeState(box.project, TASK, 'done', [at('10:00:00.000'), at('11:00:00.000')]);
+    writePrices(box.project);
+    writeTranscript(box.dir, 'sess-a.jsonl', [
+      permissionModeLine(),
+      fileHistorySnapshotLine('m0'),
+      bang('npx specpilot gate TASK-1'),
+      permissionModeLine(),
+      fileHistorySnapshotLine('m1'),
+      assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 }),
+      fileHistorySnapshotLine('m2'),
+    ]);
+    const result = runCli(box, 'cost', TASK, '--json');
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).tokens.input).toBe(5);
+  });
+
+  test('AC-4: a task id with a regex character (fix-1.2) finds the session that ran specpilot gate fix-1.2', () => {
+    const task = 'fix-1.2';
+    writeState(box.project, task, 'done', [at('10:00:00.000'), at('11:00:00.000')]);
+    writePrices(box.project);
+    writeTranscript(box.dir, 'sess-a.jsonl', [
+      bang(`npx specpilot gate ${task}`),
+      assistant({ id: 'm1', at: at('10:10:00.000'), input: 7 }),
+    ]);
+    const result = runCli(box, 'cost', task, '--json');
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).tokens.input).toBe(7);
   });
 
   test('AC-5: an unfinished task counts messages after its last transition and says it is in progress', () => {
@@ -482,6 +516,22 @@ describe('specpilot mode', () => {
     expect(result.stderr).toContain('max');
     expect(snapshot()).toEqual(before);
     expect(fs.existsSync(path.join(box.project, '.specpilot', 'config.json'))).toBe(false);
+  });
+
+  test('AC-15: an unknown mode prints exactly "Unknown mode: turbo (valid modes: standard, max)"', () => {
+    const expected = 'Unknown mode: turbo (valid modes: standard, max)\n';
+    const set = runCli(box, 'mode', 'turbo');
+    expect(set.status).toBe(1);
+    expect(set.stdout).toBe('');
+    expect(set.stderr).toBe(expected);
+
+    const file = path.join(box.project, '.specpilot', 'config.json');
+    fs.mkdirSync(path.dirname(file));
+    fs.writeFileSync(file, JSON.stringify({ mode: 'turbo' }));
+    const shown = runCli(box, 'mode');
+    expect(shown.status).toBe(1);
+    expect(shown.stdout).toBe('');
+    expect(shown.stderr).toBe(expected);
   });
 
   describe('AC-13: a corrupt .specpilot/config.json', () => {
