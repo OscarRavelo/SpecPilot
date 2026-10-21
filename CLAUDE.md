@@ -15,6 +15,10 @@ Specs for SpecPilot's own steps live in `docs/specs/`, never in `specs/`: a `spe
 
 Never run tests-agent and code-agent at the same time. Each step waits for the previous one to finish; any new test, including pinning tests, is written and run before code-agent starts the next green step.
 
+Every red step, in every round: show the human the red tests with the Jest output, wait for their "ok", commit the red (spec and tests only), and only then start code-agent. The green goes in its own commit.
+
+Every time a commit is pushed to a branch with an open PR, update the PR title and description with `gh pr edit` so they cover everything the branch now holds (red and green phases, review rounds, decisions taken), not only the first commit.
+
 ## Hard rules
 
 - Nobody marks a task done without running `npm test` and showing the output.
