@@ -15,7 +15,7 @@ The round 2 pinning tests killed the survivors they targeted: `cost.ts` subagent
 
 ## Equivalent survivors
 
-30 survivors, classified as equivalent and checked by an adversarial audit (below), pending the human's approval in the PR review. "Real logs" means the user's Claude Code transcripts in `~/.claude/projects/` on 2026-10-21 (5 main sessions, 64 subagent files) and their agent files.
+30 survivors, classified as equivalent and checked by an adversarial audit (below), and approved as equivalent by the human on 2026-10-21. "Real logs" means the user's Claude Code transcripts in `~/.claude/projects/` on 2026-10-21 (5 main sessions, 64 subagent files) and their agent files.
 
 | Location | Mutants | Why it is equivalent |
 |---|---|---|
