@@ -13,7 +13,7 @@ The round 2 pinning tests killed the survivors they targeted: `cost.ts` subagent
 
 ## Equivalent survivors
 
-The human accepted these as equivalent: no input SpecPilot reads, or no transcript Claude Code writes, tells them apart from the original code.
+Classified as equivalent in the round 2 review, pending the human's approval in the PR review: no input SpecPilot reads, or no transcript Claude Code writes, tells them apart from the original code.
 
 | Location | Mutants | Why it is equivalent |
 |---|---|---|
