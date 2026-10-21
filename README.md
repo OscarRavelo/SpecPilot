@@ -165,7 +165,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 6 | `tdd red` / `tdd green` with evidence | ✅ Done | Red must fail on an assertion; tests cannot change after green |
 | 7 | `mutate`: Stryker plus targeted bugs | ✅ Done | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |
 | 8 | `verify` and the false "done" detector | ✅ Done | A criterion with no test blocks the task and counts as a hallucination |
-| 9 | Cost and latency metrics, Standard/Max modes | 🟡 In review ([#5](https://github.com/OscarRavelo/SpecPilot/pull/5)) | A known transcript gives exact tokens and € |
+| 9 | Cost and latency metrics, Standard/Max modes | ✅ Done | A known transcript gives exact tokens and € |
 | 10 | `specpilot init` (zero friction) | — | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
 | 11 | Evaluation on ~10 real tasks | — | `specpilot report` fills the success table below |
 
