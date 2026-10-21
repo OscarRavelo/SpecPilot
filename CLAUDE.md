@@ -17,6 +17,8 @@ Never run tests-agent and code-agent at the same time. Each step waits for the p
 
 Every red step, in every round: show the human the red tests with the Jest output, wait for their "ok", commit the red (spec and tests only), and only then start code-agent. The green goes in its own commit.
 
+A task gets at most 3 red/green rounds to look for new gaps; whatever the round 3 review still finds goes into the README known limits, with no round 4. The limit does not stop the human from approving tests that close mutants an audit of equivalent survivors shows are not equivalent.
+
 Every time a commit is pushed to a branch with an open PR, update the PR title and description with `gh pr edit` so they cover everything the branch now holds (red and green phases, review rounds, decisions taken), not only the first commit.
 
 ## Hard rules
@@ -65,7 +67,7 @@ npx specpilot mutate bug <task> AC-n  # code-agent injects a bug for AC-n, then 
 ```
 
 Only the human approves an equivalent mutant in `specs/<task>/equivalents.md`.
-Survivors in the CLI code (tests run `dist/cli.js`) are never approved as equivalents.
+Survivors in the CLI code (tests run `dist/cli.js`) are never approved as equivalents. This means code that is only tested through `dist/cli.js`; a module with its own unit tests that import `src/` (such as `src/cost.ts` or `src/mode.ts`) is judged on those tests, and its survivors can be approved as equivalent.
 
 ## Conventions
 

@@ -58,6 +58,7 @@ Known limits of [`cost` and `mode`](cost.md):
 - The default prices leave out Claude Haiku 5.5, whose price depends on prompt size, and any model whose ID was not confirmed on the pricing page. Add them in `.specpilot/prices.json`.
 - The mode in the `cost` report is the current mode, not the one the task ran with.
 - `mode` rewrites every `.claude/agents/*.md`, including agents that are not part of the workflow.
+- Windows is not supported in v0.1 (development is on macOS and CI runs on Linux). `cost` and `mode` rely on Node's `readdirSync` returning names in sorted order, as it does on macOS and Linux; on Windows, `mode` could list the updated agent files in a different order, or name a different file when two are broken.
 - The transcript folder name follows Claude Code's current rule; if Claude Code changes it, `cost` reports the folder as missing.
 
 ## Workflow
