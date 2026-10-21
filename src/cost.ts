@@ -178,14 +178,15 @@ export function taskMessages(dir: string, taskId: string): TranscriptMessage[] {
   return dedupeMessages(messages);
 }
 
-// Claude Code writes one line per content block, each with the whole message usage, so a message.id counts once.
+// Claude Code writes one line per content block and streams output_tokens, so a message.id counts once,
+// in the place of its first copy, with the usage of its last copy (earlier copies are partial).
 export function dedupeMessages(messages: TranscriptMessage[]): TranscriptMessage[] {
-  const seen = new Set<string>();
-  return messages.filter((message) => {
-    if (seen.has(message.id)) return false;
-    seen.add(message.id);
-    return true;
-  });
+  const byId = new Map<string, TranscriptMessage>();
+  for (const message of messages) {
+    const first = byId.get(message.id);
+    byId.set(message.id, first ? { ...first, tokens: message.tokens } : message);
+  }
+  return [...byId.values()];
 }
 
 // From the first transition to the last one, or to now if the task is not done.
@@ -234,6 +235,10 @@ export function readPrices(projectRoot: string): { prices: Prices; file: string 
   }
   if (!prices || typeof prices.models !== 'object' || !prices.models || typeof prices.usdToEur !== 'number') {
     throw new Error(`Corrupt prices file ${file}`);
+  }
+  for (const [model, price] of Object.entries(prices.models)) {
+    const missing = TOKEN_TYPES.find((type) => !price || typeof price[type] !== 'number' || !Number.isFinite(price[type]));
+    if (missing) throw new Error(`Corrupt prices file ${file}: model ${model} has no number for ${missing}`);
   }
   return { prices, file };
 }
