@@ -22,10 +22,10 @@ How it finds the task's messages:
 - **Transcript folder:** `~/.claude/projects/<P>`, where `<P>` is the absolute project path with every character that is not a letter or a digit replaced by `-`. Only this folder is read. If it does not exist, `cost` exits 1 naming it.
 - **Task sessions:** a session belongs to the task if its main transcript runs a `specpilot` command naming the task (`gate`, `tdd red|green`, `mutate`, `mutate bug`, `verify` or `reopen`), as a Bash tool call or a `!` command. Its subagent transcripts (`<session>/subagents/*.jsonl`) and sidechain entries count too.
 - **Window:** from the first to the last `at` in the task's `state.json` history, both included. A task not yet in `done` has a window that ends now, and the report says `in progress`.
-- **Messages:** assistant entries with `usage`, counted once per `message.id`. Entries of model `<synthetic>` are skipped.
+- **Messages:** assistant entries with `usage`, counted once per `message.id` with the usage of its last copy (Claude Code writes a message several times while it streams, and earlier copies hold a partial output count). Entries of model `<synthetic>` are skipped.
 - **Latency:** from the first to the last counted message.
 
-Errors exit 1 with one line and print no cost: no transcript folder, a task with no transitions, no counted message in the window (`<task> has no messages in its window`), or a model with no price (`No price for model <id> in <file>`). A missing price is never counted as 0.
+Errors exit 1 with one line and print no cost: no transcript folder, a task with no transitions, no counted message in the window (`<task> has no messages in its window`), a model with no price (`No price for model <id> in <file>`), or a prices file that is not valid JSON or has a model entry whose `input`, `output`, `cacheRead` or `cacheWrite` is not a number. A missing price is never counted as 0.
 
 ## `prices.json`
 
