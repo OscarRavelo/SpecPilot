@@ -38,6 +38,29 @@ describe('mode config', () => {
     );
     expect(readModeConfig(project)).toEqual({ mode: 'max', modes: { standard: 'haiku', max: 'claude-opus-5-5' } });
   });
+
+  // 42 is not one of the shapes AC-13 lists; it is here so a config that is valid JSON but not an object is covered too.
+  test.each([
+    ['not valid JSON', '{ not json'],
+    ['null', 'null'],
+    ['an array', '[]'],
+    ['a number', '42'],
+  ])('AC-13: a .specpilot/config.json that is %s throws "Corrupt <file>"', (_shape, text) => {
+    const file = path.join(project, '.specpilot', 'config.json');
+    fs.mkdirSync(path.dirname(file));
+    fs.writeFileSync(file, text);
+    let error: unknown;
+    try {
+      readModeConfig(project);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain('Corrupt');
+    expect(message).toContain(file);
+    expect(message).toBe(`Corrupt ${file}`);
+  });
 });
 
 describe('setModelLine', () => {
@@ -183,5 +206,36 @@ describe('setMode', () => {
     const before = snapshot();
     expect(() => setMode(project, 'max')).toThrow(/z-broken\.md/);
     expect(snapshot()).toEqual(before);
+  });
+
+  test.each([
+    ['not valid JSON', '{ not json'],
+    ['null', 'null'],
+    ['an array', '[]'],
+  ])('AC-13: a .specpilot/config.json that is %s makes setMode throw and changes no file', (_shape, text) => {
+    const file = path.join(project, '.specpilot', 'config.json');
+    fs.mkdirSync(path.dirname(file));
+    fs.writeFileSync(file, text);
+    const before = snapshot();
+    expect(() => setMode(project, 'max')).toThrow(`Corrupt ${file}`);
+    expect(snapshot()).toEqual(before);
+    expect(fs.readFileSync(file, 'utf8')).toBe(text);
+  });
+
+  test('AC-13: a project with no .claude/agents/ folder makes setMode throw naming it, and creates no config', () => {
+    fs.rmSync(path.join(project, '.claude'), { recursive: true, force: true });
+    let error: unknown;
+    try {
+      setMode(project, 'max');
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain('No agents folder');
+    expect(message).toContain(agents());
+    expect(message).toBe(`No agents folder: ${agents()}`);
+    expect(fs.existsSync(path.join(project, '.specpilot'))).toBe(false);
+    expect(fs.existsSync(path.join(project, '.claude'))).toBe(false);
   });
 });

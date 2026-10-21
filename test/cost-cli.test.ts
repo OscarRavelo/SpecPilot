@@ -231,6 +231,20 @@ describe('specpilot cost', () => {
       );
       expectOneLineError();
     });
+
+    test.each([
+      ['has no "models"', '{"checked": "2026-01-15", "usdToEur": 0.5}'],
+      ['has "models": "x"', '{"checked": "2026-01-15", "usdToEur": 0.5, "models": "x"}'],
+      ['has usdToEur as a string', `{"checked": "2026-01-15", "usdToEur": "0.5", "models": {"${MODEL}": {"input": 1, "output": 1, "cacheRead": 1, "cacheWrite": 1}}}`],
+      ['has a price written as 1e999', `{"checked": "2026-01-15", "usdToEur": 0.5, "models": {"${MODEL}": {"input": 1e999, "output": 1, "cacheRead": 1, "cacheWrite": 1}}}`],
+    ])('AC-7: a prices.json that %s exits 1 with one line naming the file and no cost', (_shape, text) => {
+      seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+      fs.writeFileSync(pricesFile(), text);
+      expectOneLineError();
+      const result = runCli(box, 'cost', TASK);
+      expect(result.stderr).toContain(`Corrupt prices file ${pricesFile()}`);
+      expect(result.stdout).not.toContain('USD');
+    });
   });
 
   test('AC-8: EUR comes from the unrounded USD (4,400 tokens at 1 USD/M, usdToEur 1.2 -> usd 0, eur 0.01)', () => {
@@ -468,5 +482,41 @@ describe('specpilot mode', () => {
     expect(result.stderr).toContain('max');
     expect(snapshot()).toEqual(before);
     expect(fs.existsSync(path.join(box.project, '.specpilot', 'config.json'))).toBe(false);
+  });
+
+  describe('AC-13: a corrupt .specpilot/config.json', () => {
+    const configFile = () => path.join(box.project, '.specpilot', 'config.json');
+
+    test.each([
+      ['not valid JSON', '{ not json'],
+      ['null', 'null'],
+      ['an array', '[]'],
+    ])('AC-13: a config.json that is %s makes mode and mode max exit 1 with one line naming it, no file changed', (_shape, text) => {
+      fs.mkdirSync(path.dirname(configFile()), { recursive: true });
+      fs.writeFileSync(configFile(), text);
+      const before = snapshot();
+
+      for (const args of [['mode'], ['mode', 'max']]) {
+        const result = runCli(box, ...args);
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe('');
+        expect(lines(result.stderr)).toHaveLength(1);
+        expect(result.stderr).toContain(configFile());
+        expect(result.stderr.trim()).toBe(`Corrupt ${configFile()}`);
+      }
+      expect(snapshot()).toEqual(before);
+      expect(fs.readFileSync(configFile(), 'utf8')).toBe(text);
+    });
+  });
+
+  test('AC-13: with no .claude/agents/ folder, mode max exits 1 with one line naming it and creates no file', () => {
+    fs.rmSync(path.join(box.project, '.claude'), { recursive: true, force: true });
+    const result = runCli(box, 'mode', 'max');
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(lines(result.stderr)).toHaveLength(1);
+    expect(result.stderr.trim()).toBe(`No agents folder: ${agents()}`);
+    expect(fs.existsSync(path.join(box.project, '.specpilot'))).toBe(false);
+    expect(fs.existsSync(path.join(box.project, '.claude'))).toBe(false);
   });
 });

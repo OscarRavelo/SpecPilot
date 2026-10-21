@@ -254,6 +254,74 @@ describe('readPrices', () => {
     expect(file).toBe(projectFile);
     expect(prices).toEqual(own);
   });
+
+  describe('AC-7: a project prices.json with an invalid shape', () => {
+    const pricesFile = () => path.join(box.project, '.specpilot', 'prices.json');
+    // Written as raw text, so shapes JSON.stringify cannot produce (1e999) reach JSON.parse as typed.
+    const writeRaw = (text: string) => writeFile(pricesFile(), text);
+    const messageOf = (): string => {
+      let error: unknown;
+      try {
+        readPrices(box.project);
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toBeInstanceOf(Error);
+      return (error as Error).message;
+    };
+    const okModel = JSON.stringify({ [MODEL]: flatPrice(1) });
+
+    test.each([
+      ['the whole file is null', 'null'],
+      ['there is no "models"', '{"checked": "2026-01-15", "usdToEur": 0.5}'],
+      ['"models" is null', '{"checked": "2026-01-15", "usdToEur": 0.5, "models": null}'],
+      ['"models" is a string', '{"checked": "2026-01-15", "usdToEur": 0.5, "models": "x"}'],
+      ['"models" is a number', '{"checked": "2026-01-15", "usdToEur": 0.5, "models": 5}'],
+      ['there is no usdToEur', `{"checked": "2026-01-15", "models": ${okModel}}`],
+      ['usdToEur is a string', `{"checked": "2026-01-15", "usdToEur": "0.5", "models": ${okModel}}`],
+    ])('AC-7: throws "Corrupt prices file <file>" when %s', (_shape, text) => {
+      writeRaw(text);
+      const message = messageOf();
+      expect(message).toContain('Corrupt prices file');
+      expect(message).toContain(pricesFile());
+      expect(message).toBe(`Corrupt prices file ${pricesFile()}`);
+    });
+
+    test('AC-7: a model entry that is null throws naming the file and the model', () => {
+      writeRaw(`{"checked": "2026-01-15", "usdToEur": 0.5, "models": {"${MODEL}": null}}`);
+      const message = messageOf();
+      expect(message).toContain('Corrupt prices file');
+      expect(message).toContain(pricesFile());
+      expect(message).toBe(`Corrupt prices file ${pricesFile()}: model ${MODEL} has no number for input`);
+    });
+
+    test('AC-7: a price written as 1e999 (Infinity once parsed) throws naming the file and the token type', () => {
+      writeRaw(
+        `{"checked": "2026-01-15", "usdToEur": 0.5, "models": {"${MODEL}": ` +
+          '{"input": 1, "output": 1, "cacheRead": 1e999, "cacheWrite": 1}}}',
+      );
+      const message = messageOf();
+      expect(message).toContain('Corrupt prices file');
+      expect(message).toContain(pricesFile());
+      expect(message).toBe(`Corrupt prices file ${pricesFile()}: model ${MODEL} has no number for cacheRead`);
+    });
+
+    test('AC-7: a valid model entry next to an invalid one still throws (every entry is checked)', () => {
+      writeRaw(
+        `{"checked": "2026-01-15", "usdToEur": 0.5, "models": {"${MODEL}": {"input": 1, "output": 1, "cacheRead": 1, "cacheWrite": 1}, ` +
+          '"claude-big-1": {"input": 1, "output": -1e999, "cacheRead": 1, "cacheWrite": 1}}}',
+      );
+      expect(messageOf()).toBe(`Corrupt prices file ${pricesFile()}: model claude-big-1 has no number for output`);
+    });
+
+    test('AC-7: costReport also throws for a "models" that is not an object', () => {
+      seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+      writeRaw('{"checked": "2026-01-15", "usdToEur": 0.5, "models": "x"}');
+      expect(() => costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home)).toThrow(
+        `Corrupt prices file ${pricesFile()}`,
+      );
+    });
+  });
 });
 
 describe('computeCost', () => {

@@ -66,7 +66,7 @@ type: cli-command
 - Then prices.file names the shipped defaults and prices.checked is a YYYY-MM-DD date
 - And given .specpilot/prices.json with checked "2026-01-15", usdToEur 0.5 and a price for the model
 - Then that file is used, its date is reported and its prices give the cost
-- And given a prices.json that is not valid JSON, or whose model entry lacks one of input, output, cacheRead or cacheWrite as a number
+- And given a prices.json that is not valid JSON, has no models object, has no numeric usdToEur, has a model entry that is not an object, or whose model entry lacks one of input, output, cacheRead or cacheWrite as a finite number (1e999 is not finite)
 - Then the command exits 1 with one line naming the file, and never prints a cost
 
 ### AC-8: Cost is summed per model and rounded once
@@ -108,6 +108,8 @@ type: cli-command
 - Then both files have model: opus
 - And when I run specpilot mode standard they have model: sonnet
 - And given .specpilot/config.json with modes {"standard": "haiku", "max": "claude-opus-5-5"}, specpilot mode max writes model: claude-opus-5-5
+- And given a .specpilot/config.json that is not valid JSON, is null or is an array, specpilot mode and specpilot mode max exit 1 with one line naming the file, and no file changes
+- And given a project with no .claude/agents/ folder, specpilot mode max exits 1 with one line naming the missing folder, and no file is created
 
 ### AC-14: Mode changes only the model line, and is idempotent
 - Given an agent file with frontmatter, a model: line and a body
