@@ -10,7 +10,7 @@ type: cli-command
 
 - **Transcript folder**: `~/.claude/projects/<P>`, where `<P>` is the absolute project path with every character that is not a letter or a digit replaced by `-` (`/Users/me/my.app` → `-Users-me-my-app`). Home is `os.homedir()`.
 - **Transcript files**: `<session>.jsonl` in that folder, and `<session>/subagents/*.jsonl` for that session's subagents (their lines have `isSidechain: true` and the parent `sessionId`).
-- **Counted message**: a line with `type: "assistant"` and `message.usage`, whose `message.model` is not `<synthetic>`. Token types: `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`.
+- **Counted message**: a line with `type: "assistant"` and `message.usage`, whose `message.model` is not `<synthetic>`. A `message.id` written more than once counts once, with the usage of its last copy (earlier copies hold a partial output count). Token types: `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`.
 - **Task session**: a session whose main transcript runs a `specpilot` command naming the task (`gate`, `tdd red|green`, `mutate`, `mutate bug`, `verify` or `reopen` followed by `<taskId>`), either as a Bash tool call or as a `!` command. Its subagent files belong to it.
 - **Task window**: from the `at` of the first entry in `specs/<taskId>/state.json` `history` to the `at` of the last one, both included. If the task is not in `done`, the window ends now and the task is "in progress".
 - **prices.json**: `{"checked": "YYYY-MM-DD", "usdToEur": <number>, "models": {"<model id>": {"input", "output", "cacheRead", "cacheWrite"}}}`, USD per million tokens. Defaults ship with SpecPilot; `.specpilot/prices.json` in the project replaces them whole.
@@ -24,11 +24,13 @@ type: cli-command
 - When I run specpilot cost TASK-1 --json
 - Then tokens is {"input": 300, "output": 30, "cacheRead": 3000, "cacheWrite": 110}
 
-### AC-2: Counts a repeated message.id once
+### AC-2: Counts a repeated message.id once, using its last copy
 - Given the transcript holds message msg_1 three times with input 100 each
 - And one other message msg_2 with input 7
 - When I run specpilot cost TASK-1 --json
 - Then tokens.input is 107
+- And given msg_3 written twice, first with output 16 and then with output 303 (Claude Code streams the output count)
+- Then msg_3 counts output 303
 
 ### AC-3: Includes subagent messages of the task session
 - Given the task session's main transcript has a message with output 10
@@ -64,6 +66,8 @@ type: cli-command
 - Then prices.file names the shipped defaults and prices.checked is a YYYY-MM-DD date
 - And given .specpilot/prices.json with checked "2026-01-15", usdToEur 0.5 and a price for the model
 - Then that file is used, its date is reported and its prices give the cost
+- And given a prices.json that is not valid JSON, or whose model entry lacks one of input, output, cacheRead or cacheWrite as a number
+- Then the command exits 1 with one line naming the file, and never prints a cost
 
 ### AC-8: Cost is summed per model and rounded once
 - Given model-a priced input 1 USD per million and model-b priced input 3 USD per million, usdToEur 0.9

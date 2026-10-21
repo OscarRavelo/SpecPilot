@@ -69,6 +69,28 @@ describe('specpilot cost', () => {
     expect(json().tokens.input).toBe(107);
   });
 
+  test('AC-2: a message.id written twice counts the output of its last copy (16 then 303 -> 303)', () => {
+    seedDoneTask(box, [
+      assistant({ id: 'msg_3', at: at('10:10:00.000'), output: 16 }),
+      assistant({ id: 'msg_3', at: at('10:10:00.000'), output: 303 }),
+    ]);
+    expect(json().tokens.output).toBe(303);
+  });
+
+  test('AC-3: counts the subagent files of a session with a full-length UUID id', () => {
+    const session = '7c3e9b21-5d4a-4f8e-9a6b-2e1f0d3c4b5a';
+    writeState(box.project, TASK, 'done', [at('10:00:00.000'), at('11:00:00.000')]);
+    writePrices(box.project);
+    writeTranscript(box.dir, `${session}.jsonl`, [
+      bang('npx specpilot gate TASK-1', session),
+      assistant({ id: 'm_main', at: at('10:10:00.000'), sessionId: session, output: 10 }),
+    ]);
+    writeTranscript(box.dir, path.join(session, 'subagents', 'agent-x.jsonl'), [
+      assistant({ id: 'm_sub', at: at('10:12:00.000'), sessionId: session, sidechain: true, output: 40 }),
+    ]);
+    expect(json().tokens.output).toBe(50);
+  });
+
   test('AC-3: includes sidechain lines and subagent files of the task session', () => {
     seedDoneTask(box, [
       assistant({ id: 'm_main', at: at('10:10:00.000'), output: 10 }),
@@ -127,6 +149,7 @@ describe('specpilot cost', () => {
     expect(missing.stdout).toBe('');
     expect(lines(missing.stderr)).toHaveLength(1);
     expect(missing.stderr).toContain(box.dir);
+    expect(missing.stderr).toContain('No Claude Code transcripts');
 
     fs.mkdirSync(box.dir, { recursive: true });
     const empty = runCli(box, 'cost', TASK);
@@ -165,6 +188,60 @@ describe('specpilot cost', () => {
     });
     expect(report.usd).toBe(2);
     expect(report.eur).toBe(1);
+  });
+
+  describe('AC-7: invalid project prices.json', () => {
+    const pricesFile = () => path.join(box.project, '.specpilot', 'prices.json');
+    const expectOneLineError = () => {
+      const result = runCli(box, 'cost', TASK);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(lines(result.stderr)).toHaveLength(1);
+      expect(result.stderr).toContain(pricesFile());
+      expect(result.stderr).not.toMatch(/NaN|null/);
+      const asJson = runCli(box, 'cost', TASK, '--json');
+      expect(asJson.status).toBe(1);
+      expect(asJson.stdout).toBe('');
+    };
+
+    test('AC-7: a prices.json that is not valid JSON exits 1 with one line naming the file', () => {
+      seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+      fs.writeFileSync(pricesFile(), '{ not json');
+      expectOneLineError();
+    });
+
+    test('AC-7: a model entry that lacks cacheWrite exits 1 with one line naming the file and no cost', () => {
+      seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+      fs.writeFileSync(
+        pricesFile(),
+        JSON.stringify({ checked: '2026-01-15', usdToEur: 0.5, models: { [MODEL]: { input: 1, output: 1, cacheRead: 1 } } }),
+      );
+      expectOneLineError();
+    });
+
+    test('AC-7: a model entry with a non-number price exits 1 with one line naming the file and no cost', () => {
+      seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+      fs.writeFileSync(
+        pricesFile(),
+        JSON.stringify({
+          checked: '2026-01-15',
+          usdToEur: 0.5,
+          models: { [MODEL]: { input: 1, output: 'free', cacheRead: 1, cacheWrite: 1 } },
+        }),
+      );
+      expectOneLineError();
+    });
+  });
+
+  test('AC-8: EUR comes from the unrounded USD (4,400 tokens at 1 USD/M, usdToEur 1.2 -> usd 0, eur 0.01)', () => {
+    seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 4400 })], {
+      checked: '2026-01-15',
+      usdToEur: 1.2,
+      models: { [MODEL]: flatPrice(1) },
+    });
+    const report = json();
+    expect(report.usd).toBe(0);
+    expect(report.eur).toBe(0.01);
   });
 
   test('AC-8: cost is summed per model and rounded once (usd 0.01, eur 0.01)', () => {
@@ -212,6 +289,18 @@ describe('specpilot cost', () => {
     const text = runCli(box, 'cost', TASK);
     expect(text.status).toBe(0);
     expect(text.stdout).toContain('Latency: 4m 05s');
+  });
+
+  test('AC-10: counted messages of the task session outside the window do not stretch latency', () => {
+    seedDoneTask(box, [
+      assistant({ id: 'm_before', at: at('09:30:00.000'), input: 1 }),
+      assistant({ id: 'm_first', at: at('10:00:00.000'), input: 1 }),
+      assistant({ id: 'm_last', at: at('10:04:05.500'), input: 1 }),
+      assistant({ id: 'm_after', at: at('11:30:00.000'), input: 1 }),
+    ]);
+    const report = json();
+    expect(report.tokens.input).toBe(2);
+    expect(report.latencyMs).toBe(245500);
   });
 
   test('AC-11: a window with no messages exits 1 with one line and prints no cost or latency', () => {
@@ -336,6 +425,31 @@ describe('specpilot mode', () => {
     const first = snapshot();
     expect(runCli(box, 'mode', 'max').status).toBe(0);
     expect(snapshot()).toEqual(first);
+  });
+
+  test('AC-15: after specpilot mode max, specpilot mode prints max and cost --json reports mode max', () => {
+    expect(runCli(box, 'mode', 'max').status).toBe(0);
+    const shown = runCli(box, 'mode');
+    expect(shown.status).toBe(0);
+    expect(shown.stdout.trim()).toBe('max');
+
+    seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+    const cost = runCli(box, 'cost', TASK, '--json');
+    expect(cost.stderr).toBe('');
+    expect(cost.status).toBe(0);
+    expect(JSON.parse(cost.stdout).mode).toBe('max');
+  });
+
+  test('AC-15: specpilot mode max keeps the other keys of .specpilot/config.json', () => {
+    const file = path.join(box.project, '.specpilot', 'config.json');
+    fs.mkdirSync(path.dirname(file));
+    fs.writeFileSync(file, JSON.stringify({ modes: { standard: 'haiku', max: 'claude-opus-5-5' } }));
+    expect(runCli(box, 'mode', 'max').status).toBe(0);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({
+      modes: { standard: 'haiku', max: 'claude-opus-5-5' },
+      mode: 'max',
+    });
+    expect(runCli(box, 'mode').stdout.trim()).toBe('max');
   });
 
   test('AC-15: with no mode ever set, specpilot mode prints standard', () => {

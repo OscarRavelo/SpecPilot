@@ -60,6 +60,39 @@ describe('setModelLine', () => {
   test('AC-14: a file with no frontmatter throws', () => {
     expect(() => setModelLine('You write code.\nmodel: haiku\n', 'opus')).toThrow();
   });
+
+  test('AC-14: a frontmatter that opens with --- but never closes throws', () => {
+    expect(() => setModelLine('---\nname: code-agent\nmodel: haiku\nYou write code.\n', 'opus')).toThrow(
+      'No frontmatter',
+    );
+  });
+
+  test('AC-14: a line that only contains "model:" later on is not the model line', () => {
+    const text = [
+      '---',
+      'name: code-agent',
+      'description: Picks the model: carefully',
+      'model: haiku',
+      '---',
+      'Body.',
+      '',
+    ].join('\n');
+    expect(setModelLine(text, 'opus')).toBe(text.replace('model: haiku', 'model: opus'));
+  });
+
+  test('AC-14: a CRLF file keeps every \\r\\n when the model line is replaced', () => {
+    const text = ['---', 'name: code-agent', 'model: haiku', 'tools: Read', '---', 'Body.', ''].join('\r\n');
+    expect(setModelLine(text, 'opus')).toBe(
+      ['---', 'name: code-agent', 'model: opus', 'tools: Read', '---', 'Body.', ''].join('\r\n'),
+    );
+  });
+
+  test('AC-14: a CRLF file keeps every \\r\\n when the model line is added', () => {
+    const text = ['---', 'name: tests-agent', 'tools: Read', '---', 'Body.', ''].join('\r\n');
+    expect(setModelLine(text, 'opus')).toBe(
+      ['---', 'name: tests-agent', 'tools: Read', 'model: opus', '---', 'Body.', ''].join('\r\n'),
+    );
+  });
 });
 
 describe('setMode', () => {
@@ -96,6 +129,29 @@ describe('setMode', () => {
     );
     setMode(project, 'max');
     expect(read('code-agent.md')).toBe(CODE_AGENT.replace('model: haiku', 'model: claude-opus-5-5'));
+  });
+
+  test('AC-15: after setMode(project, "max"), readModeConfig reports max', () => {
+    setMode(project, 'max');
+    expect(readModeConfig(project)).toEqual({ mode: 'max', modes: { standard: 'sonnet', max: 'opus' } });
+  });
+
+  test('AC-15: saving the mode keeps the other keys of an existing .specpilot/config.json', () => {
+    const file = path.join(project, '.specpilot', 'config.json');
+    fs.mkdirSync(path.dirname(file));
+    fs.writeFileSync(file, JSON.stringify({ modes: { standard: 'haiku', max: 'claude-opus-5-5' } }));
+    const changed = setMode(project, 'max');
+    expect(changed).toContain(file);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({
+      modes: { standard: 'haiku', max: 'claude-opus-5-5' },
+      mode: 'max',
+    });
+    expect(readModeConfig(project)).toEqual({ mode: 'max', modes: { standard: 'haiku', max: 'claude-opus-5-5' } });
+  });
+
+  test('AC-14: a second setMode with the same mode changes no file and reports none', () => {
+    expect(setMode(project, 'max').length).toBeGreaterThan(0);
+    expect(setMode(project, 'max')).toEqual([]);
   });
 
   test('AC-14: a second run leaves every file byte for byte the same', () => {

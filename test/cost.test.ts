@@ -18,6 +18,7 @@ import {
   type Prices,
   type TranscriptMessage,
 } from '../src/cost';
+import { setMode } from '../src/mode';
 import type { TaskState } from '../src/state';
 import {
   assistant,
@@ -31,6 +32,7 @@ import {
   seedDoneTask,
   TASK,
   writePrices,
+  writeFile,
   writeState,
   writeTranscript,
   type Sandbox,
@@ -148,17 +150,19 @@ describe('runsTaskCommand', () => {
 });
 
 describe('dedupeMessages', () => {
-  test('AC-2: keeps the first copy of each message.id, in order', () => {
+  // Order asserted: each id keeps the place of its first appearance, with the usage of its last copy.
+  test('AC-2: keeps the usage of the last copy of each message.id, in order of first appearance', () => {
     const input = [
-      message({ id: 'msg_1', tokens: { input: 100, output: 0, cacheRead: 0, cacheWrite: 0 } }),
+      message({ id: 'msg_1', tokens: { input: 50, output: 16, cacheRead: 0, cacheWrite: 0 } }),
       message({ id: 'msg_2', tokens: { input: 7, output: 0, cacheRead: 0, cacheWrite: 0 } }),
-      message({ id: 'msg_1', tokens: { input: 50, output: 0, cacheRead: 0, cacheWrite: 0 } }),
-      message({ id: 'msg_1', tokens: { input: 60, output: 0, cacheRead: 0, cacheWrite: 0 } }),
+      message({ id: 'msg_1', tokens: { input: 60, output: 120, cacheRead: 0, cacheWrite: 0 } }),
+      message({ id: 'msg_1', tokens: { input: 100, output: 303, cacheRead: 0, cacheWrite: 0 } }),
     ];
     const result = dedupeMessages(input);
     expect(ids(result)).toEqual(['msg_1', 'msg_2']);
-    expect(result[0].tokens.input).toBe(100);
+    expect(result[0].tokens).toEqual({ input: 100, output: 303, cacheRead: 0, cacheWrite: 0 });
     expect(totalTokens(result).input).toBe(107);
+    expect(totalTokens(result).output).toBe(303);
   });
 });
 
@@ -273,6 +277,12 @@ describe('computeCost', () => {
     expect(computeCost(messages, prices, '/p/prices.json')).toEqual({ usd: 0.01, eur: 0.01 });
   });
 
+  test('AC-8: EUR is computed from the unrounded USD (0.0044 USD -> usd 0, eur 0.00528 -> 0.01)', () => {
+    const own: Prices = { checked: '2026-01-15', usdToEur: 1.2, models: { [MODEL]: flatPrice(1) } };
+    const messages = [message({ id: 'x', tokens: tokens(4400) })];
+    expect(computeCost(messages, own, '/p/prices.json')).toEqual({ usd: 0, eur: 0.01 });
+  });
+
   test('AC-8: prices each token type with its own rate', () => {
     const own: Prices = {
       checked: '2026-01-15',
@@ -347,6 +357,31 @@ describe('taskMessages', () => {
     ]);
     expect(totalTokens(taskMessages(box.dir, 'TASK-1')).input).toBe(107);
   });
+
+  test('AC-2: a message.id written twice counts the output of its last copy (16 then 303 -> 303)', () => {
+    writeTranscript(box.dir, 'sess-a.jsonl', [
+      bang('npx specpilot gate TASK-1'),
+      assistant({ id: 'msg_3', at: at('10:10:00.000'), input: 4, output: 16 }),
+      assistant({ id: 'msg_3', at: at('10:10:00.000'), input: 4, output: 303 }),
+    ]);
+    const result = taskMessages(box.dir, 'TASK-1');
+    expect(ids(result)).toEqual(['msg_3']);
+    expect(totalTokens(result)).toEqual({ input: 4, output: 303, cacheRead: 0, cacheWrite: 0 });
+  });
+
+  test('AC-3: counts the subagent files of a session with a full-length UUID id', () => {
+    const session = '7c3e9b21-5d4a-4f8e-9a6b-2e1f0d3c4b5a';
+    writeTranscript(box.dir, `${session}.jsonl`, [
+      bang('npx specpilot gate TASK-1', session),
+      assistant({ id: 'm_main', at: at('10:10:00.000'), sessionId: session, output: 10 }),
+    ]);
+    writeTranscript(box.dir, path.join(session, 'subagents', 'agent-x.jsonl'), [
+      assistant({ id: 'm_sub', at: at('10:12:00.000'), sessionId: session, sidechain: true, output: 40 }),
+    ]);
+    const result = taskMessages(box.dir, 'TASK-1');
+    expect(ids(result).sort()).toEqual(['m_main', 'm_sub']);
+    expect(totalTokens(result).output).toBe(50);
+  });
 });
 
 describe('costReport', () => {
@@ -402,6 +437,74 @@ describe('costReport', () => {
     writeState(box.project, TASK, 'done', [at('10:00:00.000'), at('11:00:00.000')]);
     writePrices(box.project);
     expect(() => costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home)).toThrow(box.dir);
+    expect(() => costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home)).toThrow(
+      'No Claude Code transcripts',
+    );
+  });
+
+  test('AC-2: a message.id written twice reports the output of its last copy (16 then 303 -> 303)', () => {
+    seedDoneTask(box, [
+      assistant({ id: 'msg_1', at: at('10:05:00.000'), input: 7, output: 1 }),
+      assistant({ id: 'msg_3', at: at('10:10:00.000'), output: 16 }),
+      assistant({ id: 'msg_3', at: at('10:10:00.000'), output: 303 }),
+    ]);
+    const report = costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home);
+    expect(report.tokens).toEqual({ input: 7, output: 304, cacheRead: 0, cacheWrite: 0 });
+  });
+
+  test('AC-10: counted messages of the task session outside the window do not stretch latency', () => {
+    seedDoneTask(box, [
+      assistant({ id: 'm_before', at: at('09:30:00.000'), input: 1 }),
+      assistant({ id: 'm_first', at: at('10:00:00.000'), input: 1 }),
+      assistant({ id: 'm_last', at: at('10:04:05.500'), input: 1 }),
+      assistant({ id: 'm_after', at: at('11:30:00.000'), input: 1 }),
+    ]);
+    const report = costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home);
+    expect(report.tokens.input).toBe(2);
+    expect(report.latencyMs).toBe(245500);
+  });
+
+  describe('AC-7: invalid project prices.json', () => {
+    const report = () => costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home);
+    const pricesFile = () => path.join(box.project, '.specpilot', 'prices.json');
+    const errorOf = (run: () => unknown): Error => {
+      let error: unknown;
+      try {
+        run();
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toBeInstanceOf(Error);
+      return error as Error;
+    };
+
+    test('AC-7: a prices.json that is not valid JSON throws naming the file', () => {
+      seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+      fs.writeFileSync(pricesFile(), '{ not json');
+      expect(errorOf(report).message).toContain(pricesFile());
+    });
+
+    test('AC-7: a model entry that lacks cacheWrite throws naming the file instead of costing NaN', () => {
+      seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+      fs.writeFileSync(
+        pricesFile(),
+        JSON.stringify({ checked: '2026-01-15', usdToEur: 0.5, models: { [MODEL]: { input: 1, output: 1, cacheRead: 1 } } }),
+      );
+      expect(errorOf(report).message).toContain(pricesFile());
+    });
+
+    test('AC-7: a model entry with a non-number price throws naming the file instead of costing NaN', () => {
+      seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+      fs.writeFileSync(
+        pricesFile(),
+        JSON.stringify({
+          checked: '2026-01-15',
+          usdToEur: 0.5,
+          models: { [MODEL]: { input: 1, output: 'free', cacheRead: 1, cacheWrite: 1 } },
+        }),
+      );
+      expect(errorOf(report).message).toContain(pricesFile());
+    });
   });
 
   test('AC-11: a window with no counted messages throws saying so', () => {
@@ -409,6 +512,13 @@ describe('costReport', () => {
     expect(() => costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home)).toThrow(
       /TASK-1 has no messages in its window/,
     );
+  });
+
+  test('AC-12: reports mode max after setMode(project, "max")', () => {
+    seedDoneTask(box, [assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 })]);
+    writeFile(path.join(box.project, '.claude', 'agents', 'code-agent.md'), '---\nname: code-agent\nmodel: haiku\n---\nBody.\n');
+    setMode(box.project, 'max');
+    expect(costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home).mode).toBe('max');
   });
 
   test('AC-15: reports mode standard when no mode was ever set', () => {
