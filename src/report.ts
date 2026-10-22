@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { computeCost, inWindow, readPrices, taskMessages, taskWindow, transcriptDir } from './cost';
+import { computeCost, readPrices, windowMessages } from './cost';
 import { listTasks, loadState } from './state';
 import type { HistoryEntry, Phase, TaskState } from './state';
 import { readHallucinations } from './verify';
@@ -28,26 +28,19 @@ export function countRounds(history: HistoryEntry[]): number {
   return 1 + history.filter((entry) => entry.to === 'red' && entry.from !== 'plan').length;
 }
 
-// The EUR cost as specpilot cost computes it, or null when the task has no cost data: an empty history
-// (no window), no transcript folder for the project or no counted message in the window. These are
-// checked before the prices are read, so a corrupt prices file or a model with no price still throws
+// The EUR cost as specpilot cost computes it, or null when the task has no cost data. The prices are
+// read only once messages are found, so a corrupt prices file or a model with no price still throws
 // the same error specpilot cost prints.
-function taskCostEur(projectRoot: string, state: TaskState, now: Date): number | null {
-  if (state.history.length === 0) return null;
-  // os.homedir() already returns $HOME when it is set; reading it here also honours a HOME set in-process.
-  const dir = transcriptDir(projectRoot, process.env.HOME || os.homedir());
-  if (!fs.existsSync(dir)) return null;
-
-  const messages = inWindow(taskMessages(dir, state.taskId), taskWindow(state, now));
-  if (messages.length === 0) return null;
+function taskCostEur(projectRoot: string, state: TaskState, now: Date, home: string): number | null {
+  const result = windowMessages(projectRoot, state, now, home);
+  if (result.found !== 'messages') return null;
   const { prices, file } = readPrices(projectRoot);
-  return computeCost(messages, prices, file).eur;
+  return computeCost(result.messages, prices, file).eur;
 }
 
 // One row per specs/<task>/ with a state.json, sorted by task. Throws on a corrupt state.json,
 // hallucinations.json or prices, or a model with no price.
 export function reportRows(projectRoot: string, now: Date = new Date(), home: string = os.homedir()): ReportRow[] {
-  void home;
   const specsDir = path.join(projectRoot, SPECS_DIR);
   const rows: ReportRow[] = [];
   for (const task of listTasks(specsDir)) {
@@ -74,7 +67,7 @@ export function reportRows(projectRoot: string, now: Date = new Date(), home: st
       passed: state.phase === 'done',
       rounds: countRounds(state.history),
       hallucinations,
-      costEur: taskCostEur(projectRoot, state, now),
+      costEur: taskCostEur(projectRoot, state, now, home),
     });
   }
   return rows;
