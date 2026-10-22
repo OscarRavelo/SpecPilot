@@ -87,6 +87,7 @@ type: cli-command
 - Given a project with tasks and no .specpilot/prices.json
 - When I run specpilot report
 - Then the cost uses the prices shipped with SpecPilot and the command exits 0
-- And given a .specpilot/prices.json that is not valid (as in step 9 AC-7), the command exits 2
+- And given a .specpilot/prices.json that is not valid (as in step 9 AC-7) and a task with counted messages in its window, the command exits 2
 - And given a counted message of a model with no price, the command exits 2
 - And in both cases stderr is the same one line that specpilot cost <task> prints, and stdout is empty
+- And given a .specpilot/prices.json that is not valid and no task with counted messages in its window, the prices are never read: every cost_eur is "—" and the command exits 0, as specpilot cost reads prices only once it has messages

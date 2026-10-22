@@ -228,5 +228,20 @@ describe('specpilot report', () => {
       );
       expectSameErrorAsCost();
     });
+
+    test('AC-8: a corrupt prices.json with no task that has cost data still prints — and exits 0', () => {
+      seedNoTranscriptFolder(box);
+      writeFile(path.join(box.project, '.specpilot', 'prices.json'), '{ not json');
+      expect(fs.existsSync(box.dir)).toBe(false);
+
+      const result = runCli(box, 'report');
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toBe(
+        'task\tphase\tpassed\trounds\thallucinations\tcost_eur\n' +
+          'alpha\tdone\tyes\t1\t0\t—\n' +
+          'beta\tgreen\tno\t1\t0\t—\n',
+      );
+    });
   });
 });

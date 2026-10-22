@@ -150,6 +150,19 @@ describe('specpilot cost', () => {
     expect(JSON.parse(result.stdout).tokens.input).toBe(7);
   });
 
+  test('AC-4: a task with an empty history exits 1 with one line saying it has no window', () => {
+    writeState(box.project, TASK, 'research', []);
+    writePrices(box.project);
+    writeTranscript(box.dir, 'sess-a.jsonl', [
+      bang('npx specpilot gate TASK-1'),
+      assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 }),
+    ]);
+    const result = runCli(box, 'cost', TASK);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('TASK-1 has no transitions in its state.json, so it has no window\n');
+  });
+
   test('AC-5: an unfinished task counts messages after its last transition and says it is in progress', () => {
     writeState(box.project, TASK, 'green', [at('10:00:00.000')]);
     writePrices(box.project);
