@@ -46,9 +46,9 @@ function taskCostEur(projectRoot: string, state: TaskState, now: Date): number |
 
 // One row per specs/<task>/ with a state.json, sorted by task. Throws on a corrupt state.json,
 // hallucinations.json or prices, or a model with no price.
-export function reportRows(projectRoot: string): ReportRow[] {
+export function reportRows(projectRoot: string, now: Date = new Date(), home: string = os.homedir()): ReportRow[] {
+  void home;
   const specsDir = path.join(projectRoot, SPECS_DIR);
-  const now = new Date();
   const rows: ReportRow[] = [];
   for (const task of listTasks(specsDir)) {
     const taskDir = path.join(specsDir, task);

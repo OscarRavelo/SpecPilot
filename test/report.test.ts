@@ -79,19 +79,17 @@ describe('formatReport', () => {
 
 describe('reportRows', () => {
   let box: Sandbox;
-  const savedHome = process.env.HOME;
   beforeEach(() => {
     box = makeSandbox('specpilot-report');
-    process.env.HOME = box.home;
   });
   afterEach(() => {
-    process.env.HOME = savedHome;
     removeSandbox(box);
   });
 
+  // alpha's window is closed (10:00 to 11:00); beta is in progress, so its window runs from 12:00 to now.
   test('AC-1: one row per task with state.json, sorted by task, with the costs in EUR', () => {
     seedAlphaBeta(box);
-    expect(reportRows(box.project)).toEqual([
+    expect(reportRows(box.project, undefined, box.home)).toEqual([
       { task: 'alpha', phase: 'done', passed: true, rounds: 1, hallucinations: 0, costEur: 1.24 },
       { task: 'beta', phase: 'green', passed: false, rounds: 1, hallucinations: 0, costEur: 0.5 },
     ]);
@@ -99,7 +97,7 @@ describe('reportRows', () => {
 
   test('AC-5: a folder without state.json is skipped', () => {
     seedAlphaAndSpecOnly(box);
-    expect(reportRows(box.project)).toEqual([
+    expect(reportRows(box.project, undefined, box.home)).toEqual([
       { task: 'alpha', phase: 'red', passed: false, rounds: 1, hallucinations: 0, costEur: null },
     ]);
   });
@@ -107,7 +105,7 @@ describe('reportRows', () => {
   // The message of the error reportRows throws, or undefined when it does not throw.
   const thrownMessage = (): string | undefined => {
     try {
-      reportRows(box.project);
+      reportRows(box.project, undefined, box.home);
     } catch (err) {
       return (err as Error).message;
     }
