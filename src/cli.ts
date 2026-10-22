@@ -74,8 +74,6 @@ Commands:
   report                  Summarize cost and quality metrics
 `;
 
-const NOT_IMPLEMENTED: string[] = [];
-
 function specLint(file: string | undefined): number {
   if (!file) {
     console.error('Usage: specpilot spec lint <file>');
@@ -701,10 +699,6 @@ function main([command, ...args]: string[]): number {
   if (command === 'mode') return mode(args);
   if (command === 'init') return init();
   if (command === 'report') return report();
-  if (NOT_IMPLEMENTED.includes(command)) {
-    console.error(`"${command}" is not implemented yet`);
-    return 1;
-  }
   console.error(`Unknown command: ${command}`);
   return 1;
 }
