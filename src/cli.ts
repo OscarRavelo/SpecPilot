@@ -44,6 +44,7 @@ import { costReport } from './cost';
 import { readModeConfig, setMode } from './mode';
 import type { Mode } from './mode';
 import { initProject } from './init';
+import type { InitActionKind } from './init';
 import type { ToolUse } from './hooks';
 import type { Evidence, JestReport } from './tdd';
 
@@ -646,8 +647,18 @@ function mode(args: string[]): number {
   return 0;
 }
 
+const INIT_MESSAGES: Record<InitActionKind, (file: string) => string> = {
+  created: (file) => `created ${file}`,
+  updated: (file) => `updated ${file} (added SpecPilot hooks)`,
+  kept: (file) => `kept ${file} (differs from the template)`,
+};
+
+// A corrupt or missing package.json or settings.json throws and exits 1 from the catch below, before any write.
 function init(): number {
-  initProject(process.cwd());
+  const { actions, warnings } = initProject(process.cwd());
+  for (const { kind, file } of actions) console.log(INIT_MESSAGES[kind](file));
+  if (actions.length === 0) console.log('SpecPilot is already installed: nothing changed.');
+  for (const warning of warnings) console.log(`warning: ${warning}`);
   return 0;
 }
 

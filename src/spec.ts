@@ -1,4 +1,4 @@
-export const TASK_TYPES = ['new-endpoint', 'endpoint-fields', 'react-component'] as const;
+export const TASK_TYPES = ['new-endpoint', 'endpoint-fields', 'react-component', 'cli-command'] as const;
 
 export type StepKind = 'given' | 'when' | 'then';
 

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx specpilot hook pre-tool-use"
+            "command": "npx --no specpilot hook pre-tool-use; s=$?; if [ \"$s\" -eq 0 ] || [ \"$s\" -eq 2 ]; then exit \"$s\"; fi; printf 'Blocked by SpecPilot: the SpecPilot hook failed (exit %s), so no edit is safe. The error is above.\\nSTOP: do not try to fix or work around the hook yourself. Ask the human how to fix it, one question at a time (like the grill phase), and wait for the answers before doing anything else.\\n' \"$s\" >&2; exit 2"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx specpilot hook stop"
+            "command": "npx --no specpilot hook stop"
           }
         ]
       }

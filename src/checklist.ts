@@ -34,6 +34,14 @@ export const CHECKLISTS: Record<TaskType, ChecklistItem[]> = {
     item('edge-cases', 'empty, null, long, duplicate and boundary values'),
     outOfScope,
   ],
+  'cli-command': [
+    item('contract', 'command, arguments and options, stdout, stderr and exit codes'),
+    item('files', 'which files it reads and writes, and which must never change'),
+    item('errors', 'every failure, with its exit code and message'),
+    item('compatibility', 'existing commands, options and files keep working'),
+    item('edge-cases', 'missing, empty, corrupt and repeated inputs'),
+    outOfScope,
+  ],
 };
 
 export function checklistFor(type: string): ChecklistItem[] {

@@ -6,7 +6,7 @@ type: new-endpoint
 
 ## Context
 What is being asked and why. Link the work item if there is one.
-Valid types: new-endpoint, endpoint-fields, react-component.
+Valid types: new-endpoint, endpoint-fields, react-component, cli-command.
 
 ## Out of scope
 What this task must NOT touch.

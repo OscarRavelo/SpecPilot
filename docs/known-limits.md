@@ -8,6 +8,12 @@ Every limit SpecPilot knows about in v0.1, grouped by feature.
 
 - Files written from inside a program (`node -e`, `python -c`, `git apply`, `git checkout -- <file>`) are not detected by the target-based Bash check ([Phase hooks](hooks.md#bash-commands)).
 
+## init
+
+- A SpecPilot hook the project already has is left as it is: `init` does not widen a narrower matcher or add `--no` to its `npx` command.
+- `init` only warns about missing packages (Jest, Stryker, `specpilot`); it never installs them.
+- SpecPilot is not published to npm yet, so it is installed from a `npm pack` tarball.
+
 ## Bash allowlist
 
 Known limits of the [Bash allowlist](roles.md#the-bash-allowlist) (`--roles`):
