@@ -185,7 +185,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 8 | `verify` and the false "done" detector | ✅ Done | A criterion with no test blocks the task and counts as a hallucination |
 | 9 | Cost and latency metrics, Standard/Max modes | ✅ Done | A known transcript gives exact tokens and € |
 | 10 | `specpilot init` (zero friction) | ✅ Done | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
-| 11 | Evaluation on ~10 real tasks | — | `specpilot report` fills the success table below |
+| 11 | `specpilot report` in the user's project | — | Run from the project that uses SpecPilot, it summarizes that repo's own task data (`specs/`, hallucinations, cost) and never reads SpecPilot's repo |
 
 Out of scope (for now):
 
@@ -198,17 +198,6 @@ Later (parked ideas):
 - Recovering the spec-driven flow after a mid-task interruption.
 - A GitHub Action that blocks PRs that fail the evals.
 - An MCP server for spec-driven development.
-
-## How we measure success
-
-Tested on ~10 real tasks in a legacy ("spaghetti") codebase:
-
-| Metric | What it means |
-|---|---|
-| Success rate | % of tasks whose result passes the tests |
-| Hallucination rate | % of tasks where the agent said "done" but was wrong |
-| Useful questions | How often it asked for context instead of failing |
-| Cost per task | Average € spent per task |
 
 ## Development
 
