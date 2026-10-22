@@ -48,7 +48,7 @@ Known limits of [`verify`](verify.md#verify-the-false-done-detector) (v0.1):
 - `verify` does not run Stryker again; it only checks that the mutation evidence still matches the code and tests.
 - Nothing protects `hallucinations.json`: an agent could edit or delete it.
 - Only `verify` records hallucinations; a failing `gate` in an earlier phase is not counted as one.
-- Hallucinations are not aggregated or reported yet (step 11, `specpilot report`).
+- Hallucinations are not aggregated across tasks yet. Step 11 adds `specpilot report`, run from the project that uses SpecPilot, to summarize that repo's data.
 - Coverage counts passing tests from the whole repo, not only the task's own test files: AC ids repeat across specs (every task has an `AC-1`), so a test named `AC-2 …` written for another task also covers this task's `AC-2`.
 - `hallucinations.json` is rewritten whole, not atomically: a write that fails part way (for example, a full disk) can cut it short and lose earlier entries, although `verify` still exits 2.
 - The test for a write that fails is skipped when the tests run as root, because root ignores the read-only folder it relies on.
