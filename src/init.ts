@@ -115,9 +115,9 @@ function packageWarnings(packages: string[]): string[] {
   if (STRYKER_PACKAGES.some((name) => !packages.includes(name))) {
     warnings.push(`Stryker is not fully installed: specpilot mutate needs it. Run: ${INSTALL}`);
   }
-  if (!packages.includes('specpilot')) {
+  if (!packages.includes('@oscarravelo/specpilot')) {
     warnings.push(
-      'specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)',
+      '@oscarravelo/specpilot is not installed: the hooks run npx --no specpilot and block every edit until it is installed. Run: npm i -D @oscarravelo/specpilot@beta',
     );
   }
   return warnings;
