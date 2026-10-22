@@ -50,7 +50,12 @@ describe('the packed npm package', () => {
     const init = run('npx', ['--no', 'specpilot', 'init'], project);
     expect({ status: init.status, stderr: init.stderr }).toEqual({ status: 0, stderr: '' });
 
-    const installedTemplates = path.join(project, 'node_modules', 'specpilot', 'templates');
+    const installedPackage = path.join(project, 'node_modules', '@oscarravelo', 'specpilot');
+    const installedName = fs.existsSync(path.join(installedPackage, 'package.json'))
+      ? JSON.parse(fs.readFileSync(path.join(installedPackage, 'package.json'), 'utf8')).name
+      : null;
+    expect(installedName).toBe('@oscarravelo/specpilot');
+    const installedTemplates = path.join(installedPackage, 'templates');
     for (const file of FILES) {
       const target = path.join(project, file);
       const actual = fs.existsSync(target) ? fs.readFileSync(target) : null;
@@ -64,9 +69,10 @@ describe('the packed npm package', () => {
     }
     expect(lines(init.stdout).filter((line) => line.startsWith('created '))).toHaveLength(3);
 
-    // The specpilot warning is the one about the hooks running npx --no specpilot (AC-8).
+    // The @oscarravelo/specpilot warning is the one about the hooks running npx --no specpilot (AC-8).
     const specpilotWarnings = lines(init.stdout).filter(
-      (line) => line.startsWith('warning: ') && line.includes('npx --no specpilot'),
+      (line) =>
+        line.startsWith('warning: ') && (line.includes('@oscarravelo/specpilot') || line.includes('npx --no specpilot')),
     );
     expect(specpilotWarnings).toEqual([]);
   }, 120000);

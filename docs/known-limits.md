@@ -11,8 +11,8 @@ Every limit SpecPilot knows about in v0.1, grouped by feature.
 ## init
 
 - A SpecPilot hook the project already has is left as it is: `init` does not widen a narrower matcher or add `--no` to its `npx` command.
-- `init` only warns about missing packages (Jest, Stryker, `specpilot`); it never installs them.
-- SpecPilot is not published to npm yet, so it is installed from a `npm pack` tarball.
+- `init` only warns about missing packages (Jest, Stryker, `@oscarravelo/specpilot`); it never installs them.
+- `init` counts only `@oscarravelo/specpilot` as installed. A project that installed an older tarball named `specpilot` gets the warning until it installs the scoped package.
 
 ## Bash allowlist
 

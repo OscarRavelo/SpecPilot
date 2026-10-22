@@ -82,30 +82,21 @@ npx specpilot report                             # one row per task: phase, pass
 
 ## Quickstart
 
-SpecPilot is not published to npm yet. Clone it, install and run the tests:
+SpecPilot is published on npm as `@oscarravelo/specpilot` (beta). The unscoped `specpilot` package on npm is a different project. To use it in your project (React + TS or Node + TS, with Jest), install it and run `init` at the project root:
 
 ```bash
-git clone https://github.com/OscarRavelo/SpecPilot.git
-cd SpecPilot
-npm install
-npm test            # builds dist/ and runs Jest
-```
-
-To use it in your project (React + TS or Node + TS, with Jest), install it from a packed tarball and run `init` at the project root:
-
-```bash
-npm pack                                   # in the SpecPilot folder: makes specpilot-<version>.tgz
-cd ../your-project
-npm i -D ../SpecPilot/specpilot-<version>.tgz
+npm i -D @oscarravelo/specpilot@beta
 npx specpilot init
 ```
+
+The command is still called `specpilot`.
 
 `init` writes `.claude/settings.json` (the [phase hooks](docs/hooks.md)), the [`sp-grill` skill](templates/.claude/skills/sp-grill/SKILL.md) and the [`grill-auditor` subagent](templates/.claude/agents/grill-auditor.md):
 
 - An existing `settings.json` is merged: your keys and hooks stay first, and only SpecPilot hooks that are missing are added.
 - A file you changed is kept and reported (`kept <path> (differs from the template)`).
 - A corrupt `settings.json` or `package.json` stops it before any write.
-- It warns when Jest, the Stryker packages or `specpilot` itself are missing; it never installs packages.
+- It warns when Jest, the Stryker packages or `@oscarravelo/specpilot` itself are missing; it never installs packages.
 - Running it again prints `SpecPilot is already installed: nothing changed.`
 
 Each task lives in `specs/<task-id>/spec.md` (start from [`templates/spec.md`](templates/spec.md)). The `id` must match the folder name, and `type` is one of `new-endpoint`, `endpoint-fields`, `react-component` or `cli-command`. Acceptance criteria are `### AC-<n>: <title>` with `- Given` / `- When` / `- Then` steps (`- And` continues the previous step):
@@ -204,7 +195,7 @@ Later (parked ideas):
 
 SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. It is built with two Claude Code subagents, `tests-agent` (edits only `test/`) and `code-agent` (edits only `src/`), enforced by the repo's own role hook ([Agent roles](docs/roles.md#how-specpilot-itself-uses-roles)). Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
 
-Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node). [CI](.github/workflows/test.yml) runs the type check and `npm test` on Node 22 and 24. The suite currently has 1348 tests in 22 suites.
+Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node). [CI](.github/workflows/test.yml) runs the type check and `npm test` on Node 22 and 24. The suite currently has 1350 tests in 22 suites.
 
 ```bash
 npm install

@@ -1,6 +1,6 @@
 {
-  "name": "specpilot",
-  "version": "0.1.0-dev",
+  "name": "@oscarravelo/specpilot",
+  "version": "0.1.0-beta.0",
   "description": "AI coding agents that work from specs, and get tested and measured before you trust them.",
   "license": "MIT",
   "bin": {
@@ -10,6 +10,9 @@
     "dist",
     "templates"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22"
   },

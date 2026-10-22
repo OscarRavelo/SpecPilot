@@ -14,6 +14,7 @@ type: cli-command
 - **SpecPilot pre-tool-use hook**: a hook in a `hooks.PreToolUse` group of settings.json whose `command` contains `specpilot hook pre-tool-use`, with or without `--roles`.
 - **SpecPilot stop hook**: a hook in a `hooks.Stop` group whose `command` contains `specpilot hook stop`.
 - **Package list**: the keys of `dependencies` and `devDependencies` in `package.json`.
+- **SpecPilot package**: `@oscarravelo/specpilot`, the scoped name SpecPilot is published under. The unscoped `specpilot` on npm is an unrelated package. The bin is still called `specpilot`.
 - **Stryker packages**: `@stryker-mutator/core`, `@stryker-mutator/jest-runner` and `@stryker-mutator/typescript-checker`.
 - **Task types**: `TASK_TYPES` in `src/spec.ts`, in this order: `new-endpoint`, `endpoint-fields`, `react-component`, `cli-command`.
 - **cli-command checklist** (what the grill must pin down for a CLI command), in this order:
@@ -96,9 +97,10 @@ type: cli-command
 - When I run specpilot init
 - Then stdout has a warning naming jest
 - And given a package list without one of the Stryker packages, stdout has a warning with the command "npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker"
-- And given a package list without specpilot, stdout has the warning "specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)"
-- And no warning suggests npm i -D specpilot, since SpecPilot is not on npm and that would install an unrelated package
-- And given a package list with jest, every Stryker package and specpilot (in dependencies or devDependencies), stdout has no warning
+- And given a package list without @oscarravelo/specpilot, stdout has the warning "@oscarravelo/specpilot is not installed: the hooks run npx --no specpilot and block every edit until it is installed. Run: npm i -D @oscarravelo/specpilot@beta"
+- And given a package list with the unscoped specpilot but not @oscarravelo/specpilot, stdout has that same warning
+- And no warning suggests npm i -D specpilot, since the unscoped specpilot is an unrelated package
+- And given a package list with jest, every Stryker package and @oscarravelo/specpilot (in dependencies or devDependencies), stdout has no warning
 - And the warnings never change the exit code 0
 
 ### AC-9: The installed pre-tool-use hook fails closed
@@ -115,8 +117,9 @@ type: cli-command
 - Then it lists package/templates/.claude/settings.json, package/templates/.claude/skills/sp-grill/SKILL.md and package/templates/.claude/agents/grill-auditor.md
 - When I install the tarball with npm install --offline into a temp project whose package.json has no dependencies (so nothing is downloaded), and run npx --no specpilot init there
 - Then the command exits 0
+- And the package is installed at node_modules/@oscarravelo/specpilot
 - And the 3 installed files are byte for byte equal to the templates in the tarball
-- And stdout has no warning about specpilot
+- And stdout has no warning about @oscarravelo/specpilot
 
 ### AC-11: cli-command is a task type and every spec in docs/specs/ passes spec lint
 - Given TASK_TYPES in src/spec.ts
