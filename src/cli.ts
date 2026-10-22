@@ -45,6 +45,7 @@ import { readModeConfig, setMode } from './mode';
 import type { Mode } from './mode';
 import { initProject } from './init';
 import type { InitActionKind } from './init';
+import { formatReport, reportRows } from './report';
 import type { ToolUse } from './hooks';
 import type { Evidence, JestReport } from './tdd';
 
@@ -73,7 +74,7 @@ Commands:
   report                  Summarize cost and quality metrics
 `;
 
-const NOT_IMPLEMENTED = ['report'];
+const NOT_IMPLEMENTED: string[] = [];
 
 function specLint(file: string | undefined): number {
   if (!file) {
@@ -662,6 +663,12 @@ function init(): number {
   return 0;
 }
 
+// Read-only: one row per task of specs/.
+function report(): number {
+  formatReport(reportRows(process.cwd()));
+  return 0;
+}
+
 function main([command, ...args]: string[]): number {
   if (command === '--help' || command === '-h') {
     console.log(HELP);
@@ -685,6 +692,7 @@ function main([command, ...args]: string[]): number {
   if (command === 'cost') return cost(args);
   if (command === 'mode') return mode(args);
   if (command === 'init') return init();
+  if (command === 'report') return report();
   if (NOT_IMPLEMENTED.includes(command)) {
     console.error(`"${command}" is not implemented yet`);
     return 1;
