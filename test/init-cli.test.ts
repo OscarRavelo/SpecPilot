@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
+import { INSTALL as MUTATION_INSTALL } from '../src/mutation';
 
 // Runs the compiled CLI, i.e. exactly what gets published (`npm test` builds first).
 const REPO = path.join(__dirname, '..');
@@ -14,6 +15,10 @@ const SKILL = '.claude/skills/sp-grill/SKILL.md';
 const AUDITOR = '.claude/agents/grill-auditor.md';
 const FILES = [SETTINGS, SKILL, AUDITOR];
 const INSTALL = 'npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker';
+const SPECPILOT_WARNING =
+  'specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)';
+const JEST_WARNING = 'jest is not installed: SpecPilot runs your tests with Jest';
+const STRYKER_WARNING = `Stryker is not fully installed: specpilot mutate needs it. Run: ${MUTATION_INSTALL}`;
 
 type Hook = { type: string; command: string };
 type Group = { matcher?: string; hooks: Hook[] };
@@ -227,25 +232,94 @@ describe('specpilot init', () => {
       expect(read(SETTINGS).toString('utf8')).toBe(merged);
       expect(lines(second.stdout)).toContain('SpecPilot is already installed: nothing changed.');
     });
+
+    test('AC-4: a settings.json with permissions and no hooks gains both template groups', () => {
+      copyFixture('node-ts');
+      write(SETTINGS, JSON.stringify({ permissions: PERMISSIONS }, null, 2) + '\n');
+      const result = runInit(project);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+
+      const tmpl = templateSettings();
+      const text = read(SETTINGS).toString('utf8');
+      expect(JSON.parse(text)).toEqual({
+        permissions: PERMISSIONS,
+        hooks: { PreToolUse: [...tmpl.hooks.PreToolUse], Stop: [...tmpl.hooks.Stop] },
+      });
+      expect(text).toBe(JSON.stringify(JSON.parse(text), null, 2) + '\n');
+      expect(lines(result.stdout)).toContain('updated .claude/settings.json (added SpecPilot hooks)');
+    });
+
+    test('AC-4: groups with no hooks array, or a hook with no command, are kept and the template groups are appended', () => {
+      copyFixture('node-ts');
+      const noHooks = { matcher: 'Write' };
+      const noCommand = { matcher: 'Edit', hooks: [{ type: 'command' }] };
+      const stopNoCommand = { hooks: [{ type: 'command' }] };
+      write(
+        SETTINGS,
+        JSON.stringify({ permissions: PERMISSIONS, hooks: { PreToolUse: [noHooks, noCommand], Stop: [stopNoCommand] } }, null, 2) +
+          '\n',
+      );
+      const result = runInit(project);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+
+      const tmpl = templateSettings();
+      expect(JSON.parse(read(SETTINGS).toString('utf8'))).toEqual({
+        permissions: PERMISSIONS,
+        hooks: {
+          PreToolUse: [noHooks, noCommand, ...tmpl.hooks.PreToolUse],
+          Stop: [stopNoCommand, ...tmpl.hooks.Stop],
+        },
+      });
+      expect(lines(result.stdout)).toContain('updated .claude/settings.json (added SpecPilot hooks)');
+    });
+
+    test('AC-4: other hook events (PostToolUse) are kept, in their place', () => {
+      copyFixture('node-ts');
+      const post: Group = { matcher: 'Write', hooks: [{ type: 'command', command: './format.sh' }] };
+      write(SETTINGS, JSON.stringify({ permissions: PERMISSIONS, hooks: { PostToolUse: [post], PreToolUse: [LINT] } }, null, 2) + '\n');
+      const result = runInit(project);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+
+      const tmpl = templateSettings();
+      const merged = JSON.parse(read(SETTINGS).toString('utf8'));
+      expect(merged).toEqual({
+        permissions: PERMISSIONS,
+        hooks: { PostToolUse: [post], PreToolUse: [LINT, ...tmpl.hooks.PreToolUse], Stop: [...tmpl.hooks.Stop] },
+      });
+      expect(Object.keys(merged)).toEqual(['permissions', 'hooks']);
+      expect(Object.keys(merged.hooks)).toEqual(['PostToolUse', 'PreToolUse', 'Stop']);
+    });
   });
 
   describe('AC-5: a corrupt settings.json', () => {
+    const NOT_JSON = 'Corrupt .claude/settings.json: not valid JSON';
+    const ROOT = 'Corrupt .claude/settings.json: the root is not an object';
+    const HOOKS = 'Corrupt .claude/settings.json: "hooks" is not an object';
+    const PRE = 'Corrupt .claude/settings.json: "hooks.PreToolUse" is not an array';
+    const STOP = 'Corrupt .claude/settings.json: "hooks.Stop" is not an array';
+
     test.each([
-      ['not valid JSON', '{ "hooks": '],
-      ['null', 'null'],
-      ['an array', '[]'],
-      ['a number', '42'],
-      ['hooks is a string', '{"hooks": "x"}'],
-      ['hooks is an array', '{"hooks": []}'],
-      ['hooks.PreToolUse is not an array', '{"hooks": {"PreToolUse": {}}}'],
-      ['hooks.Stop is not an array', '{"hooks": {"Stop": "x"}}'],
-    ])('AC-5: %s exits 1 naming the file, before any write', (_shape, text) => {
+      ['not valid JSON', '{ "hooks": ', NOT_JSON],
+      ['null', 'null', ROOT],
+      ['an array', '[]', ROOT],
+      ['a number', '42', ROOT],
+      ['hooks is a string', '{"hooks": "x"}', HOOKS],
+      ['hooks is an array', '{"hooks": []}', HOOKS],
+      ['hooks is null', '{"hooks": null}', HOOKS],
+      ['hooks.PreToolUse is not an array', '{"hooks": {"PreToolUse": {}}}', PRE],
+      ['hooks.PreToolUse is null', '{"hooks": {"PreToolUse": null}}', PRE],
+      ['hooks.Stop is not an array', '{"hooks": {"Stop": "x"}}', STOP],
+    ])('AC-5: %s exits 1 naming the file, before any write', (_shape, text, message) => {
       copyFixture('node-ts');
       write(SETTINGS, text);
       const result = runInit(project);
       expect(result.status).toBe(1);
       expect(stderrLines(result.stderr)).toHaveLength(1);
       expect(result.stderr).toContain('.claude/settings.json');
+      expect(result.stderr).toBe(`${message}\n`);
       expect(read(SETTINGS).toString('utf8')).toBe(text);
       expect(exists(SKILL)).toBe(false);
       expect(exists(AUDITOR)).toBe(false);
@@ -283,20 +357,27 @@ describe('specpilot init', () => {
       expect(stderrLines(result.stderr)).toHaveLength(1);
       expect(result.stderr).toContain('package.json');
       expect(result.stderr).toContain('project root');
+      // process.cwd() in the CLI is the real path (on macOS /var is a link to /private/var).
+      expect(result.stderr).toBe(
+        `No package.json in ${fs.realpathSync(project)}: specpilot init must run at the project root\n`,
+      );
       expect(entries(project)).toEqual([]);
     });
 
     test.each([
-      ['not valid JSON', '{ "name": '],
-      ['null', 'null'],
-      ['an array', '[]'],
-      ['a number', '42'],
-    ])('AC-7: a package.json that is %s exits 1 naming package.json and creates nothing', (_shape, text) => {
+      ['not valid JSON', '{ "name": ', 'not valid JSON'],
+      ['null', 'null', 'the root is not an object'],
+      ['an array', '[]', 'the root is not an object'],
+      ['a number', '42', 'the root is not an object'],
+    ])('AC-7: a package.json that is %s exits 1 naming package.json and creates nothing', (_shape, text, reason) => {
       write('package.json', text);
       const result = runInit(project);
       expect(result.status).toBe(1);
       expect(stderrLines(result.stderr)).toHaveLength(1);
       expect(result.stderr).toContain('package.json');
+      expect(result.stderr).toBe(
+        `Corrupt package.json: ${reason} (${path.join(fs.realpathSync(project), 'package.json')})\n`,
+      );
       expect(entries(project)).toEqual(['package.json']);
       expect(read('package.json').toString('utf8')).toBe(text);
     });
@@ -314,6 +395,7 @@ describe('specpilot init', () => {
       const result = runInit(project);
       expect(result.status).toBe(0);
       expect(warnings(result.stdout)).toEqual([expect.stringContaining('jest')]);
+      expect(warnings(result.stdout)).toEqual([`warning: ${JEST_WARNING}`]);
     });
 
     test.each([
@@ -325,6 +407,8 @@ describe('specpilot init', () => {
       const result = runInit(project);
       expect(result.status).toBe(0);
       expect(warnings(result.stdout)).toEqual([expect.stringContaining(INSTALL)]);
+      expect(MUTATION_INSTALL).toBe(INSTALL);
+      expect(warnings(result.stdout)).toEqual([`warning: ${STRYKER_WARNING}`]);
     });
 
     test('AC-8: without specpilot there is one warning saying the hooks run npx --no specpilot', () => {
@@ -332,6 +416,36 @@ describe('specpilot init', () => {
       const result = runInit(project);
       expect(result.status).toBe(0);
       expect(warnings(result.stdout)).toEqual([expect.stringContaining('npx --no specpilot')]);
+    });
+
+    test('AC-8: without specpilot the warning has the exact text and points to the README', () => {
+      writePackage(without('specpilot'));
+      const result = runInit(project);
+      expect(result.status).toBe(0);
+      expect(warnings(result.stdout)).toEqual([
+        'warning: specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)',
+      ]);
+    });
+
+    test('AC-8: no stdout line suggests npm i -D specpilot, with or without other packages', () => {
+      for (const pkg of [without('specpilot'), { name: 'sample', version: '1.0.0' }]) {
+        writePackage(pkg);
+        const result = runInit(project);
+        expect(result.status).toBe(0);
+        for (const line of lines(result.stdout)) {
+          expect({ line, suggests: line.includes('npm i -D specpilot') }).toEqual({ line, suggests: false });
+        }
+      }
+    });
+
+    test('AC-8: a project with no packages gets exactly the jest, Stryker and specpilot warning lines', () => {
+      writePackage({ name: 'sample', version: '1.0.0' });
+      const result = runInit(project);
+      expect(result.status).toBe(0);
+      // The spec does not pin the order of the warnings.
+      expect([...warnings(result.stdout)].sort()).toEqual(
+        [`warning: ${JEST_WARNING}`, `warning: ${STRYKER_WARNING}`, `warning: ${SPECPILOT_WARNING}`].sort(),
+      );
     });
 
     test('AC-8: a project with no packages gets the jest, Stryker and specpilot warnings and still exits 0', () => {

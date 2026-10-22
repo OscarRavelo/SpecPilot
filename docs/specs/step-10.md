@@ -96,7 +96,8 @@ type: cli-command
 - When I run specpilot init
 - Then stdout has a warning naming jest
 - And given a package list without one of the Stryker packages, stdout has a warning with the command "npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker"
-- And given a package list without specpilot, stdout has a warning saying the hooks run npx --no specpilot and block every edit until specpilot is installed
+- And given a package list without specpilot, stdout has the warning "specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)"
+- And no warning suggests npm i -D specpilot, since SpecPilot is not on npm and that would install an unrelated package
 - And given a package list with jest, every Stryker package and specpilot (in dependencies or devDependencies), stdout has no warning
 - And the warnings never change the exit code 0
 

@@ -82,6 +82,21 @@ describe('mergeSettings', () => {
     });
   });
 
+  test('AC-4: a PreToolUse group whose second hook is SpecPilot\'s counts as SpecPilot\'s, so only Stop is added', () => {
+    const tmpl = templateSettings();
+    const mixed: Group = {
+      matcher: 'Bash',
+      hooks: [
+        { type: 'command', command: './lint.sh' },
+        { type: 'command', command: 'npx specpilot hook pre-tool-use' },
+      ],
+    };
+    expect(mergeSettings({ hooks: { PreToolUse: [mixed] } }, tmpl)).toEqual({
+      settings: { hooks: { PreToolUse: [mixed], Stop: [...tmpl.hooks.Stop] } },
+      added: true,
+    });
+  });
+
   test('AC-4: an existing SpecPilot stop hook means only the PreToolUse group is added', () => {
     const tmpl = templateSettings();
     const stop: Group = { hooks: [{ type: 'command', command: 'node dist/cli.js; npx specpilot hook stop' }] };
@@ -194,7 +209,9 @@ describe('initProject', () => {
     ['a number', '42'],
     ['hooks is a string', '{"hooks": "x"}'],
     ['hooks is an array', '{"hooks": []}'],
+    ['hooks is null', '{"hooks": null}'],
     ['hooks.PreToolUse is not an array', '{"hooks": {"PreToolUse": {}}}'],
+    ['hooks.PreToolUse is null', '{"hooks": {"PreToolUse": null}}'],
     ['hooks.Stop is not an array', '{"hooks": {"Stop": "x"}}'],
   ])('AC-5: a settings.json that is %s throws an Error naming the file, before any write', (_shape, text) => {
     writePackage(ALL_PACKAGES);
@@ -263,6 +280,7 @@ describe('initProject', () => {
       writePackage(without('jest'));
       const { warnings } = initProject(project, REPO_TEMPLATES);
       expect(warnings).toEqual([expect.stringContaining('jest')]);
+      expect(warnings).toEqual(['jest is not installed: SpecPilot runs your tests with Jest']);
     });
 
     test('AC-8: without a Stryker package there is one warning with the INSTALL command', () => {
@@ -270,12 +288,24 @@ describe('initProject', () => {
       const { warnings } = initProject(project, REPO_TEMPLATES);
       expect(INSTALL).toBe('npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker');
       expect(warnings).toEqual([expect.stringContaining(INSTALL)]);
+      expect(warnings).toEqual([`Stryker is not fully installed: specpilot mutate needs it. Run: ${INSTALL}`]);
     });
 
     test('AC-8: without specpilot there is one warning about npx --no specpilot', () => {
       writePackage(without('specpilot'));
       const { warnings } = initProject(project, REPO_TEMPLATES);
       expect(warnings).toEqual([expect.stringContaining('npx --no specpilot')]);
+    });
+
+    test('AC-8: without specpilot the warning has the exact text and never suggests npm i -D specpilot', () => {
+      writePackage(without('specpilot'));
+      const { warnings } = initProject(project, REPO_TEMPLATES);
+      expect(warnings).toEqual([
+        'specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)',
+      ]);
+      for (const warning of warnings) {
+        expect({ warning, suggests: warning.includes('npm i -D specpilot') }).toEqual({ warning, suggests: false });
+      }
     });
 
     test('AC-8: with no packages there are 3 warnings, and the files are still installed', () => {
