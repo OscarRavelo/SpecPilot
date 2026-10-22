@@ -292,6 +292,36 @@ describe('specpilot init', () => {
       expect(Object.keys(merged)).toEqual(['permissions', 'hooks']);
       expect(Object.keys(merged.hooks)).toEqual(['PostToolUse', 'PreToolUse', 'Stop']);
     });
+
+    test('AC-4: a Stop group running a non-SpecPilot command is kept first and the template Stop group is appended', () => {
+      copyFixture('node-ts');
+      const notify: Group = { hooks: [{ type: 'command', command: './notify.sh' }] };
+      write(SETTINGS, JSON.stringify({ permissions: PERMISSIONS, hooks: { PreToolUse: [LINT], Stop: [notify] } }, null, 2) + '\n');
+      const result = runInit(project);
+      expect(result.status).toBe(0);
+
+      const tmpl = templateSettings();
+      expect(JSON.parse(read(SETTINGS).toString('utf8'))).toEqual({
+        permissions: PERMISSIONS,
+        hooks: { PreToolUse: [LINT, ...tmpl.hooks.PreToolUse], Stop: [notify, ...tmpl.hooks.Stop] },
+      });
+      expect(lines(result.stdout)).toContain('updated .claude/settings.json (added SpecPilot hooks)');
+    });
+
+    test('AC-4: null groups and null hooks are kept and the template groups are appended', () => {
+      copyFixture('node-ts');
+      const edit = { matcher: 'Edit', hooks: [null] };
+      write(SETTINGS, JSON.stringify({ hooks: { PreToolUse: [null, edit], Stop: [null] } }, null, 2) + '\n');
+      const result = runInit(project);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+
+      const tmpl = templateSettings();
+      expect(JSON.parse(read(SETTINGS).toString('utf8'))).toEqual({
+        hooks: { PreToolUse: [null, edit, ...tmpl.hooks.PreToolUse], Stop: [null, ...tmpl.hooks.Stop] },
+      });
+      expect(lines(result.stdout)).toContain('updated .claude/settings.json (added SpecPilot hooks)');
+    });
   });
 
   describe('AC-5: a corrupt settings.json', () => {
