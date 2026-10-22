@@ -43,6 +43,7 @@ import { acCoverage, readHallucinations, recordHallucination, verifyProblems } f
 import { costReport } from './cost';
 import { readModeConfig, setMode } from './mode';
 import type { Mode } from './mode';
+import { initProject } from './init';
 import type { ToolUse } from './hooks';
 import type { Evidence, JestReport } from './tdd';
 
@@ -71,7 +72,7 @@ Commands:
   report                  Summarize cost and quality metrics
 `;
 
-const NOT_IMPLEMENTED = ['init', 'report'];
+const NOT_IMPLEMENTED = ['report'];
 
 function specLint(file: string | undefined): number {
   if (!file) {
@@ -645,6 +646,11 @@ function mode(args: string[]): number {
   return 0;
 }
 
+function init(): number {
+  initProject(process.cwd());
+  return 0;
+}
+
 function main([command, ...args]: string[]): number {
   if (command === '--help' || command === '-h') {
     console.log(HELP);
@@ -667,6 +673,7 @@ function main([command, ...args]: string[]): number {
   if (command === 'verify') return verify(args[0]);
   if (command === 'cost') return cost(args);
   if (command === 'mode') return mode(args);
+  if (command === 'init') return init();
   if (NOT_IMPLEMENTED.includes(command)) {
     console.error(`"${command}" is not implemented yet`);
     return 1;

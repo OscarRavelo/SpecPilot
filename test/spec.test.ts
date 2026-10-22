@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { parseSpec, lintSpec } from '../src/spec';
+import { parseSpec, lintSpec, TASK_TYPES } from '../src/spec';
 import type { LintError } from '../src/spec';
 
 const fixture = (name: string) =>
@@ -75,6 +75,12 @@ describe('parseSpec', () => {
   });
 });
 
+describe('TASK_TYPES', () => {
+  test('AC-11: lists the 4 task types in order, cli-command last', () => {
+    expect([...TASK_TYPES]).toEqual(['new-endpoint', 'endpoint-fields', 'react-component', 'cli-command']);
+  });
+});
+
 describe('lintSpec', () => {
   test('a valid spec has no errors', () => {
     expect(lintSpec(fixture('valid.md'))).toEqual([]);
@@ -118,7 +124,7 @@ describe('lintSpec', () => {
       {
         code: 'SPEC_INVALID_TYPE',
         line: 2,
-        message: 'Invalid type "microservice". Use: new-endpoint, endpoint-fields, react-component',
+        message: 'Invalid type "microservice". Use: new-endpoint, endpoint-fields, react-component, cli-command',
       },
       { code: 'SPEC_DUPLICATE_AC', line: 13, message: 'AC-1 is duplicated' },
       {
@@ -149,6 +155,20 @@ describe('lintSpec', () => {
       'AC-2 has no Given',
       'AC-2 has no When',
     ]);
+  });
+
+  test('AC-11: a spec with type cli-command passes lint', () => {
+    const text = fixture('valid.md').replace('type: endpoint-fields', 'type: cli-command');
+    expect(text).toContain('type: cli-command');
+    expect(lintSpec(text)).toEqual([]);
+    expect(parseSpec(text).type).toBe('cli-command');
+  });
+
+  test('AC-11: an unknown type gets SPEC_INVALID_TYPE ending with the 4 task types', () => {
+    const text = fixture('valid.md').replace('type: endpoint-fields', 'type: microservice');
+    const [error] = lintSpec(text);
+    expect(error.code).toBe('SPEC_INVALID_TYPE');
+    expect(error.message.endsWith('Use: new-endpoint, endpoint-fields, react-component, cli-command')).toBe(true);
   });
 
   test('the published template passes lint', () => {

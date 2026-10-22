@@ -60,7 +60,7 @@ export interface Equivalent {
 }
 
 const STRYKER = '@stryker-mutator/core';
-const INSTALL = 'npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker';
+export const INSTALL ='npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker';
 
 // Evidence written before specpilot mutate existed has no source hashes; only tdd red and green write them.
 export function missingSourceHashes(taskId: string, stage: 'red' | 'green'): string {
