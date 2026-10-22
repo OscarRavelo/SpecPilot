@@ -35,7 +35,7 @@ describe('runGate', () => {
     fs.writeFileSync(path.join(dir, 'spec.md'), VALID_SPEC.replace('type: endpoint-fields', 'type: x'));
     expect(runGate(dir, 'research')).toEqual({
       ok: false,
-      reasons: ['spec.md:3 SPEC_INVALID_TYPE Invalid type "x". Use: new-endpoint, endpoint-fields, react-component'],
+      reasons: ['spec.md:3 SPEC_INVALID_TYPE Invalid type "x". Use: new-endpoint, endpoint-fields, react-component, cli-command'],
     });
   });
 
@@ -103,7 +103,7 @@ describe('runGate: grill', () => {
     write('spec.md', read('spec.md').replace('type: endpoint-fields', 'type: x'));
     writeAudit();
     expect(gate().reasons).toEqual([
-      'spec.md:3 SPEC_INVALID_TYPE Invalid type "x". Use: new-endpoint, endpoint-fields, react-component',
+      'spec.md:3 SPEC_INVALID_TYPE Invalid type "x". Use: new-endpoint, endpoint-fields, react-component, cli-command',
     ]);
   });
 
@@ -541,5 +541,73 @@ describe('runGate: mutation', () => {
       noCaughtBug('AC-1');
       expect(gate().reasons.some((text) => /\bAC-2\b/.test(text))).toBe(false);
     });
+  });
+});
+
+describe('runGate: grill for a cli-command task', () => {
+  const SPEC = [
+    '---',
+    'id: TASK-7',
+    'type: cli-command',
+    '---',
+    '# specpilot hello',
+    '',
+    '## Acceptance criteria',
+    '',
+    '### AC-1: Prints a greeting',
+    '- Given any project',
+    '- When I run specpilot hello',
+    '- Then stdout is "hello"',
+    '',
+  ].join('\n');
+  const ITEMS = [
+    ['contract', 'command, arguments and options, stdout, stderr and exit codes'],
+    ['files', 'which files it reads and writes, and which must never change'],
+    ['errors', 'every failure, with its exit code and message'],
+    ['compatibility', 'existing commands, options and files keep working'],
+    ['edge-cases', 'missing, empty, corrupt and repeated inputs'],
+    ['out-of-scope', 'what this task must not touch'],
+  ];
+  const ledger = (topics: string[]) =>
+    [
+      '# Grill ledger: TASK-7',
+      '',
+      '## Questions',
+      '',
+      '### Q1: Does hello take arguments?',
+      '- Status: answered',
+      '- Answer: No.',
+      '',
+      '## Facts',
+      '',
+      `- (${topics.join(', ')}) hello prints "hello" and takes no arguments [spec:AC-1] [human:Q1]`,
+      '',
+    ].join('\n');
+  let project: string;
+  const taskDir = () => path.join(project, 'specs', 'TASK-7');
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'specpilot-grill-cli-'));
+    fs.mkdirSync(taskDir(), { recursive: true });
+    fs.writeFileSync(path.join(taskDir(), 'spec.md'), SPEC);
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  test('AC-12: the grill gate requires a cited fact for each cli-command checklist item', () => {
+    fs.writeFileSync(path.join(taskDir(), 'grill.md'), ledger(['contract']));
+    const reasons = runGate(taskDir(), 'grill', project).reasons;
+    expect(reasons).toEqual(
+      expect.arrayContaining(
+        ITEMS.slice(1).map(([id, description]) => `Checklist item not covered: ${id} (${description})`),
+      ),
+    );
+    expect(reasons.some((text) => text.startsWith('Checklist item not covered: contract '))).toBe(false);
+  });
+
+  test('AC-12: a ledger covering every cli-command item leaves no checklist reason', () => {
+    fs.writeFileSync(path.join(taskDir(), 'grill.md'), ledger(ITEMS.map(([id]) => id)));
+    const reasons = runGate(taskDir(), 'grill', project).reasons;
+    // Only the missing audit is left.
+    expect(reasons).toEqual(['Missing audit.md: run the grill-auditor subagent']);
   });
 });

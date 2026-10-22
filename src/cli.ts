@@ -43,6 +43,8 @@ import { acCoverage, readHallucinations, recordHallucination, verifyProblems } f
 import { costReport } from './cost';
 import { readModeConfig, setMode } from './mode';
 import type { Mode } from './mode';
+import { initProject } from './init';
+import type { InitActionKind } from './init';
 import type { ToolUse } from './hooks';
 import type { Evidence, JestReport } from './tdd';
 
@@ -71,7 +73,7 @@ Commands:
   report                  Summarize cost and quality metrics
 `;
 
-const NOT_IMPLEMENTED = ['init', 'report'];
+const NOT_IMPLEMENTED = ['report'];
 
 function specLint(file: string | undefined): number {
   if (!file) {
@@ -645,6 +647,21 @@ function mode(args: string[]): number {
   return 0;
 }
 
+const INIT_MESSAGES: Record<InitActionKind, (file: string) => string> = {
+  created: (file) => `created ${file}`,
+  updated: (file) => `updated ${file} (added SpecPilot hooks)`,
+  kept: (file) => `kept ${file} (differs from the template)`,
+};
+
+// A corrupt or missing package.json or settings.json throws and exits 1 from the catch below, before any write.
+function init(): number {
+  const { actions, warnings } = initProject(process.cwd());
+  for (const { kind, file } of actions) console.log(INIT_MESSAGES[kind](file));
+  if (actions.length === 0) console.log('SpecPilot is already installed: nothing changed.');
+  for (const warning of warnings) console.log(`warning: ${warning}`);
+  return 0;
+}
+
 function main([command, ...args]: string[]): number {
   if (command === '--help' || command === '-h') {
     console.log(HELP);
@@ -667,6 +684,7 @@ function main([command, ...args]: string[]): number {
   if (command === 'verify') return verify(args[0]);
   if (command === 'cost') return cost(args);
   if (command === 'mode') return mode(args);
+  if (command === 'init') return init();
   if (NOT_IMPLEMENTED.includes(command)) {
     console.error(`"${command}" is not implemented yet`);
     return 1;

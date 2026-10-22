@@ -2,7 +2,7 @@
 
 [← Back to the README](../README.md)
 
-Phase hooks keep the agent inside the workflow. The [`settings.json` template](../templates/.claude/settings.json) runs `specpilot hook pre-tool-use` before every `Write`, `Edit`, `MultiEdit`, `NotebookEdit` and `Bash` call, and blocks the edit (exit code 2, with the reason shown to the agent) when the task's phase does not allow it:
+Phase hooks keep the agent inside the workflow. The [`settings.json` template](../templates/.claude/settings.json) (installed by `specpilot init`) runs `npx --no specpilot hook pre-tool-use` before every `Write`, `Edit`, `MultiEdit`, `NotebookEdit` and `Bash` call, and blocks the edit (exit code 2, with the reason shown to the agent) when the task's phase does not allow it. The hook fails closed: if `specpilot` is not installed in the project or the hook crashes, the edit is blocked and the agent is told to stop and ask the human how to fix it, one question at a time. `--no` keeps `npx` from downloading an unrelated `specpilot` package from npm:
 
 | Phase | Tests | Source code |
 |---|---|---|

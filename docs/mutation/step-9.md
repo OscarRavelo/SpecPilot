@@ -1,6 +1,6 @@
 # Step 9: mutation results
 
-[Spec](step-9.md)
+[Spec](../specs/step-9.md)
 
 Stryker 10 over `src/cost.ts` and `src/mode.ts`, with the same settings `specpilot mutate` generates (Jest runner, TypeScript checker, `perTest` coverage). `specpilot mutate` itself needs a task under `specs/`, and SpecPilot's own steps have none. The CLI tests run `dist/cli.js`, so only the unit tests can kill these mutants.
 

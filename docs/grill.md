@@ -4,7 +4,7 @@
 
 ## Spec format
 
-Each task lives in `specs/<task-id>/spec.md` (start from [`templates/spec.md`](../templates/spec.md)). The `id` must match the folder name, and `type` is one of `new-endpoint`, `endpoint-fields` or `react-component`. Acceptance criteria are written as `### AC-<n>: <title>` under `## Acceptance criteria`, with `- Given` / `- When` / `- Then` steps; `- And` continues the previous step:
+Each task lives in `specs/<task-id>/spec.md` (start from [`templates/spec.md`](../templates/spec.md)). The `id` must match the folder name, and `type` is one of `new-endpoint`, `endpoint-fields`, `react-component` or `cli-command`. Acceptance criteria are written as `### AC-<n>: <title>` under `## Acceptance criteria`, with `- Given` / `- When` / `- Then` steps; `- And` continues the previous step:
 
 ```markdown
 ---
@@ -52,6 +52,7 @@ Each task type has a checklist the grill must cover (`specpilot grill checklist`
 | `new-endpoint` | contract, validation, errors, data, auth, edge-cases, out-of-scope |
 | `endpoint-fields` | contract, validation, errors, data, auth, compatibility, edge-cases, out-of-scope |
 | `react-component` | contract, states, data, validation, errors, auth, accessibility, compatibility, edge-cases, out-of-scope |
+| `cli-command` | contract, files, errors, compatibility, edge-cases, out-of-scope |
 
 ## The grill gate
 

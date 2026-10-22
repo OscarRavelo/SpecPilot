@@ -21,7 +21,7 @@ AI coding agents are fast, but you can't trust them blindly. Teams adopting spec
 | **Unknown cost.** No view of what each task costs in tokens and money. | `specpilot cost <task>` reads the Claude Code transcripts and reports the task's tokens per type, cost in USD and EUR, and latency. `specpilot mode standard\|max` switches every agent between a cheaper and a more capable model. |
 | **A fragile workflow.** A question or correction mid-task knocks the agent out of the spec-driven flow. | Phase hooks and gates the agent cannot talk its way past keep every step (research, grill-me, plan, red, green, verify) in order. |
 
-**Easy to adopt:** clone it, `npm install`, write a spec with Given/When/Then acceptance criteria, and let the gates do the checking. A one-command `specpilot init` setup is coming in v0.1.
+**Easy to adopt:** `npx specpilot init` installs the Claude Code hooks, skill and auditor into your project (running it again changes nothing). Then write a spec with Given/When/Then acceptance criteria and let the gates do the checking.
 
 ## Key features
 
@@ -62,6 +62,7 @@ flowchart LR
 Phase hooks block edits the current phase does not allow ([Phase hooks](docs/hooks.md), [Agent roles](docs/roles.md)).
 
 ```bash
+npx specpilot init                               # install the Claude Code hooks, skill and auditor
 npx specpilot spec lint specs/TASK-101/spec.md   # check the spec format
 npx specpilot ledger check TASK-101              # check every citation in the grill ledger
 npx specpilot grill checklist TASK-101           # show covered and missing checklist items
@@ -89,7 +90,24 @@ npm install
 npm test            # builds dist/ and runs Jest
 ```
 
-Each task lives in `specs/<task-id>/spec.md` (start from [`templates/spec.md`](templates/spec.md)). The `id` must match the folder name, and `type` is one of `new-endpoint`, `endpoint-fields` or `react-component`. Acceptance criteria are `### AC-<n>: <title>` with `- Given` / `- When` / `- Then` steps (`- And` continues the previous step):
+To use it in your project (React + TS or Node + TS, with Jest), install it from a packed tarball and run `init` at the project root:
+
+```bash
+npm pack                                   # in the SpecPilot folder: makes specpilot-<version>.tgz
+cd ../your-project
+npm i -D ../SpecPilot/specpilot-<version>.tgz
+npx specpilot init
+```
+
+`init` writes `.claude/settings.json` (the [phase hooks](docs/hooks.md)), the [`sp-grill` skill](templates/.claude/skills/sp-grill/SKILL.md) and the [`grill-auditor` subagent](templates/.claude/agents/grill-auditor.md):
+
+- An existing `settings.json` is merged: your keys and hooks stay first, and only SpecPilot hooks that are missing are added.
+- A file you changed is kept and reported (`kept <path> (differs from the template)`).
+- A corrupt `settings.json` or `package.json` stops it before any write.
+- It warns when Jest, the Stryker packages or `specpilot` itself are missing; it never installs packages.
+- Running it again prints `SpecPilot is already installed: nothing changed.`
+
+Each task lives in `specs/<task-id>/spec.md` (start from [`templates/spec.md`](templates/spec.md)). The `id` must match the folder name, and `type` is one of `new-endpoint`, `endpoint-fields`, `react-component` or `cli-command`. Acceptance criteria are `### AC-<n>: <title>` with `- Given` / `- When` / `- Then` steps (`- And` continues the previous step):
 
 ```markdown
 ---
@@ -166,7 +184,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 7 | `mutate`: Stryker plus targeted bugs | ✅ Done | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |
 | 8 | `verify` and the false "done" detector | ✅ Done | A criterion with no test blocks the task and counts as a hallucination |
 | 9 | Cost and latency metrics, Standard/Max modes | ✅ Done | A known transcript gives exact tokens and € |
-| 10 | `specpilot init` (zero friction) | — | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
+| 10 | `specpilot init` (zero friction) | ✅ Done | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
 | 11 | Evaluation on ~10 real tasks | — | `specpilot report` fills the success table below |
 
 Out of scope (for now):
@@ -196,7 +214,7 @@ Tested on ~10 real tasks in a legacy ("spaghetti") codebase:
 
 SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. It is built with two Claude Code subagents, `tests-agent` (edits only `test/`) and `code-agent` (edits only `src/`), enforced by the repo's own role hook ([Agent roles](docs/roles.md#how-specpilot-itself-uses-roles)). Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
 
-Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node). [CI](.github/workflows/test.yml) runs the type check and `npm test` on Node 22 and 24. The suite currently has 1084 tests in 13 suites.
+Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node). [CI](.github/workflows/test.yml) runs the type check and `npm test` on Node 22 and 24. The suite currently has 1301 tests in 20 suites.
 
 ```bash
 npm install
