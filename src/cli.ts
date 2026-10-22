@@ -663,9 +663,17 @@ function init(): number {
   return 0;
 }
 
-// Read-only: one row per task of specs/.
+// Read-only: one row per task of specs/. Exit 2 means the report could not be built (a corrupt
+// state.json, hallucinations.json or prices file, or a model with no price), and nothing is printed to stdout.
 function report(): number {
-  formatReport(reportRows(process.cwd()));
+  let rows: ReturnType<typeof reportRows>;
+  try {
+    rows = reportRows(process.cwd());
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
+  for (const line of formatReport(rows)) console.log(line);
   return 0;
 }
 

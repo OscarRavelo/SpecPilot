@@ -77,6 +77,7 @@ npx specpilot verify TASK-101                    # rerun the checks: move to don
 npx specpilot reopen TASK-101 red                # go back (only plan→grill, mutation→red, verify→red)
 npx specpilot cost TASK-101                      # tokens, cost (USD/EUR) and latency of the task; --json for JSON
 npx specpilot mode max                           # set every agent's model (standard or max); no argument prints the mode
+npx specpilot report                             # one row per task: phase, passed, rounds, hallucinations, cost in EUR
 ```
 
 ## Quickstart
@@ -203,7 +204,7 @@ Later (parked ideas):
 
 SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. It is built with two Claude Code subagents, `tests-agent` (edits only `test/`) and `code-agent` (edits only `src/`), enforced by the repo's own role hook ([Agent roles](docs/roles.md#how-specpilot-itself-uses-roles)). Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
 
-Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node). [CI](.github/workflows/test.yml) runs the type check and `npm test` on Node 22 and 24. The suite currently has 1301 tests in 20 suites.
+Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node). [CI](.github/workflows/test.yml) runs the type check and `npm test` on Node 22 and 24. The suite currently has 1344 tests in 22 suites.
 
 ```bash
 npm install
