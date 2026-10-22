@@ -27,9 +27,11 @@ const ALL_PACKAGES = {
     '@stryker-mutator/core': '10.0.0',
     '@stryker-mutator/jest-runner': '10.0.0',
     '@stryker-mutator/typescript-checker': '10.0.0',
-    specpilot: '^0.1.0',
+    '@oscarravelo/specpilot': '^0.1.0-beta.0',
   },
 };
+const SPECPILOT_WARNING =
+  '@oscarravelo/specpilot is not installed: the hooks run npx --no specpilot and block every edit until it is installed. Run: npm i -D @oscarravelo/specpilot@beta';
 
 const byFile = (actions: InitAction[]) => [...actions].sort((a, b) => a.file.localeCompare(b.file));
 
@@ -291,21 +293,26 @@ describe('initProject', () => {
       expect(warnings).toEqual([`Stryker is not fully installed: specpilot mutate needs it. Run: ${INSTALL}`]);
     });
 
-    test('AC-8: without specpilot there is one warning about npx --no specpilot', () => {
-      writePackage(without('specpilot'));
+    test('AC-8: without @oscarravelo/specpilot there is one warning about npx --no specpilot', () => {
+      writePackage(without('@oscarravelo/specpilot'));
       const { warnings } = initProject(project, REPO_TEMPLATES);
       expect(warnings).toEqual([expect.stringContaining('npx --no specpilot')]);
     });
 
-    test('AC-8: without specpilot the warning has the exact text and never suggests npm i -D specpilot', () => {
-      writePackage(without('specpilot'));
+    test('AC-8: without @oscarravelo/specpilot the warning has the exact text and never suggests npm i -D specpilot', () => {
+      writePackage(without('@oscarravelo/specpilot'));
       const { warnings } = initProject(project, REPO_TEMPLATES);
-      expect(warnings).toEqual([
-        'specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)',
-      ]);
+      expect(warnings).toEqual([SPECPILOT_WARNING]);
       for (const warning of warnings) {
         expect({ warning, suggests: warning.includes('npm i -D specpilot') }).toEqual({ warning, suggests: false });
       }
+    });
+
+    test('AC-8: the unscoped specpilot without @oscarravelo/specpilot gets the same warning', () => {
+      const pkg = without('@oscarravelo/specpilot');
+      writePackage({ ...pkg, devDependencies: { ...pkg.devDependencies, specpilot: '^1.0.0' } });
+      const { warnings } = initProject(project, REPO_TEMPLATES);
+      expect(warnings).toEqual([SPECPILOT_WARNING]);
     });
 
     test('AC-8: with no packages there are 3 warnings, and the files are still installed', () => {

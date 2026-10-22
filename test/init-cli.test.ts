@@ -16,7 +16,7 @@ const AUDITOR = '.claude/agents/grill-auditor.md';
 const FILES = [SETTINGS, SKILL, AUDITOR];
 const INSTALL = 'npm i -D @stryker-mutator/core @stryker-mutator/jest-runner @stryker-mutator/typescript-checker';
 const SPECPILOT_WARNING =
-  'specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)';
+  '@oscarravelo/specpilot is not installed: the hooks run npx --no specpilot and block every edit until it is installed. Run: npm i -D @oscarravelo/specpilot@beta';
 const JEST_WARNING = 'jest is not installed: SpecPilot runs your tests with Jest';
 const STRYKER_WARNING = `Stryker is not fully installed: specpilot mutate needs it. Run: ${MUTATION_INSTALL}`;
 
@@ -30,7 +30,7 @@ const ALL_PACKAGES = {
     '@stryker-mutator/core': '10.0.0',
     '@stryker-mutator/jest-runner': '10.0.0',
     '@stryker-mutator/typescript-checker': '10.0.0',
-    specpilot: '^0.1.0',
+    '@oscarravelo/specpilot': '^0.1.0-beta.0',
   },
 };
 
@@ -441,24 +441,32 @@ describe('specpilot init', () => {
       expect(warnings(result.stdout)).toEqual([`warning: ${STRYKER_WARNING}`]);
     });
 
-    test('AC-8: without specpilot there is one warning saying the hooks run npx --no specpilot', () => {
-      writePackage(without('specpilot'));
+    test('AC-8: without @oscarravelo/specpilot there is one warning saying the hooks run npx --no specpilot', () => {
+      writePackage(without('@oscarravelo/specpilot'));
       const result = runInit(project);
       expect(result.status).toBe(0);
       expect(warnings(result.stdout)).toEqual([expect.stringContaining('npx --no specpilot')]);
     });
 
-    test('AC-8: without specpilot the warning has the exact text and points to the README', () => {
-      writePackage(without('specpilot'));
+    test('AC-8: without @oscarravelo/specpilot the warning has the exact text and the beta install command', () => {
+      writePackage(without('@oscarravelo/specpilot'));
       const result = runInit(project);
       expect(result.status).toBe(0);
       expect(warnings(result.stdout)).toEqual([
-        'warning: specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)',
+        'warning: @oscarravelo/specpilot is not installed: the hooks run npx --no specpilot and block every edit until it is installed. Run: npm i -D @oscarravelo/specpilot@beta',
       ]);
     });
 
+    test('AC-8: the unscoped specpilot without @oscarravelo/specpilot gets the same warning', () => {
+      const pkg = without('@oscarravelo/specpilot');
+      writePackage({ ...pkg, devDependencies: { ...pkg.devDependencies, specpilot: '^1.0.0' } });
+      const result = runInit(project);
+      expect(result.status).toBe(0);
+      expect(warnings(result.stdout)).toEqual([`warning: ${SPECPILOT_WARNING}`]);
+    });
+
     test('AC-8: no stdout line suggests npm i -D specpilot, with or without other packages', () => {
-      for (const pkg of [without('specpilot'), { name: 'sample', version: '1.0.0' }]) {
+      for (const pkg of [without('@oscarravelo/specpilot'), { name: 'sample', version: '1.0.0' }]) {
         writePackage(pkg);
         const result = runInit(project);
         expect(result.status).toBe(0);
@@ -493,7 +501,7 @@ describe('specpilot init', () => {
       writePackage({
         name: 'sample',
         version: '1.0.0',
-        dependencies: { specpilot: '^0.1.0', '@stryker-mutator/core': '10.0.0' },
+        dependencies: { '@oscarravelo/specpilot': '^0.1.0-beta.0', '@stryker-mutator/core': '10.0.0' },
         devDependencies: {
           jest: '^30.0.0',
           '@stryker-mutator/jest-runner': '10.0.0',
