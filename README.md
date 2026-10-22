@@ -184,7 +184,7 @@ Every step is built with rule #1 on SpecPilot itself: tests first, then code, th
 | 7 | `mutate`: Stryker plus targeted bugs | ✅ Done | A weak test fails the gate; a leftover bug is detected; a bug that does not compile is not counted as caught |
 | 8 | `verify` and the false "done" detector | ✅ Done | A criterion with no test blocks the task and counts as a hallucination |
 | 9 | Cost and latency metrics, Standard/Max modes | ✅ Done | A known transcript gives exact tokens and € |
-| 10 | `specpilot init` (zero friction) | — | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
+| 10 | `specpilot init` (zero friction) | ✅ Done | Installs into sample React + TS and Node + TS projects; running it twice changes nothing |
 | 11 | Evaluation on ~10 real tasks | — | `specpilot report` fills the success table below |
 
 Out of scope (for now):
@@ -214,7 +214,7 @@ Tested on ~10 real tasks in a legacy ("spaghetti") codebase:
 
 SpecPilot is written in TypeScript (`src/`) and compiled to `dist/`. It is built with two Claude Code subagents, `tests-agent` (edits only `test/`) and `code-agent` (edits only `src/`), enforced by the repo's own role hook ([Agent roles](docs/roles.md#how-specpilot-itself-uses-roles)). Tests use Jest with ts-jest; the CLI tests run the compiled binary, so they check exactly what gets published.
 
-Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node). [CI](.github/workflows/test.yml) runs the type check and `npm test` on Node 22 and 24. The suite currently has 1299 tests in 20 suites.
+Requires Node >= 22 (Stryker 10 needs it; `specpilot mutate` stops with a clear message on an older Node). [CI](.github/workflows/test.yml) runs the type check and `npm test` on Node 22 and 24. The suite currently has 1301 tests in 20 suites.
 
 ```bash
 npm install
