@@ -41,10 +41,8 @@ describe('specpilot CLI', () => {
     expect(result.stderr).toContain('Unknown command: fly');
   });
 
-  test('a command that is not implemented yet says so and exits 1, and verify is no longer one', () => {
-    const result = run('report');
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('"report" is not implemented yet');
+  test('AC-7: report and verify are no longer commands that are not implemented yet', () => {
+    expect(run('report').stderr).not.toContain('is not implemented yet');
     expect(run('verify').stderr).not.toContain('not implemented');
   });
 

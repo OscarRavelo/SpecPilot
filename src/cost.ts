@@ -189,12 +189,14 @@ export function dedupeMessages(messages: TranscriptMessage[]): TranscriptMessage
   return [...byId.values()];
 }
 
+function noWindowMessage(taskId: string): string {
+  return `${taskId} has no transitions in its state.json, so it has no window`;
+}
+
 // From the first transition to the last one, or to now if the task is not done.
 export function taskWindow(state: TaskState, now: Date = new Date()): TaskWindow {
   const { history } = state;
-  if (history.length === 0) {
-    throw new Error(`${state.taskId} has no transitions in its state.json, so it has no window`);
-  }
+  if (history.length === 0) throw new Error(noWindowMessage(state.taskId));
   const inProgress = state.phase !== 'done';
   return {
     start: history[0].at,
@@ -272,6 +274,31 @@ export function latencyMs(messages: TranscriptMessage[]): number {
   return Math.max(...times) - Math.min(...times);
 }
 
+// The counted messages of a task's window, or which cost data is missing, checked in this order:
+// an empty history (no window), no transcript folder for the project, no counted message in the window.
+// Prices are not read here, so callers read them only once messages are found.
+export type WindowMessages =
+  | { found: 'messages'; window: TaskWindow; messages: TranscriptMessage[] }
+  | { found: 'no-window' }
+  | { found: 'no-transcripts'; dir: string }
+  | { found: 'no-messages'; window: TaskWindow };
+
+export function windowMessages(
+  projectRoot: string,
+  state: TaskState,
+  now: Date = new Date(),
+  home: string = os.homedir(),
+): WindowMessages {
+  if (state.history.length === 0) return { found: 'no-window' };
+  const window = taskWindow(state, now);
+  const dir = transcriptDir(projectRoot, home);
+  if (!fs.existsSync(dir)) return { found: 'no-transcripts', dir };
+
+  const messages = inWindow(taskMessages(dir, state.taskId), window);
+  if (messages.length === 0) return { found: 'no-messages', window };
+  return { found: 'messages', window, messages };
+}
+
 export function costReport(
   projectRoot: string,
   taskId: string,
@@ -279,14 +306,15 @@ export function costReport(
   home: string = os.homedir(),
 ): CostReport {
   const state = loadState(path.join(projectRoot, 'specs', taskId), taskId);
-  const window = taskWindow(state, now);
-  const dir = transcriptDir(projectRoot, home);
-  if (!fs.existsSync(dir)) throw new Error(`No Claude Code transcripts for this project: missing ${dir}`);
-
-  const messages = inWindow(taskMessages(dir, taskId), window);
-  if (messages.length === 0) {
-    throw new Error(`${taskId} has no messages in its window (${window.start} to ${window.end})`);
+  const result = windowMessages(projectRoot, state, now, home);
+  if (result.found === 'no-window') throw new Error(noWindowMessage(taskId));
+  if (result.found === 'no-transcripts') {
+    throw new Error(`No Claude Code transcripts for this project: missing ${result.dir}`);
   }
+  if (result.found === 'no-messages') {
+    throw new Error(`${taskId} has no messages in its window (${result.window.start} to ${result.window.end})`);
+  }
+  const { window, messages } = result;
   const { prices, file } = readPrices(projectRoot);
   const { usd, eur } = computeCost(messages, prices, file);
   return {

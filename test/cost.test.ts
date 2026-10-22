@@ -537,6 +537,27 @@ describe('costReport', () => {
     );
   });
 
+  test('AC-4: costReport on a task with an empty history throws that it has no window', () => {
+    writeState(box.project, TASK, 'research', []);
+    writePrices(box.project);
+    writeTranscript(box.dir, 'sess-a.jsonl', [
+      bang('npx specpilot gate TASK-1'),
+      assistant({ id: 'm1', at: at('10:10:00.000'), input: 5 }),
+    ]);
+    expect(() => costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home)).toThrow(
+      new Error('TASK-1 has no transitions in its state.json, so it has no window'),
+    );
+  });
+
+  test('AC-4: an empty history is reported before a missing transcript folder', () => {
+    writeState(box.project, TASK, 'research', []);
+    writePrices(box.project);
+    expect(fs.existsSync(box.dir)).toBe(false);
+    expect(() => costReport(box.project, TASK, new Date(at('15:00:00.000')), box.home)).toThrow(
+      new Error('TASK-1 has no transitions in its state.json, so it has no window'),
+    );
+  });
+
   test('AC-2: a message.id written twice reports the output of its last copy (16 then 303 -> 303)', () => {
     seedDoneTask(box, [
       assistant({ id: 'msg_1', at: at('10:05:00.000'), input: 7, output: 1 }),

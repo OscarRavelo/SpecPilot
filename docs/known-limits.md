@@ -48,7 +48,7 @@ Known limits of [`verify`](verify.md#verify-the-false-done-detector) (v0.1):
 - `verify` does not run Stryker again; it only checks that the mutation evidence still matches the code and tests.
 - Nothing protects `hallucinations.json`: an agent could edit or delete it.
 - Only `verify` records hallucinations; a failing `gate` in an earlier phase is not counted as one.
-- Hallucinations are not aggregated across tasks yet. Step 11 adds `specpilot report`, run from the project that uses SpecPilot, to summarize that repo's data.
+- `specpilot report`, run from the project that uses SpecPilot, counts hallucinations per task, but it prints no totals across tasks.
 - Coverage counts passing tests from the whole repo, not only the task's own test files: AC ids repeat across specs (every task has an `AC-1`), so a test named `AC-2 …` written for another task also covers this task's `AC-2`.
 - `hallucinations.json` is rewritten whole, not atomically: a write that fails part way (for example, a full disk) can cut it short and lose earlier entries, although `verify` still exits 2.
 - The test for a write that fails is skipped when the tests run as root, because root ignores the read-only folder it relies on.
@@ -64,6 +64,7 @@ Known limits of [`cost` and `mode`](cost.md):
 - The default prices leave out Claude Haiku 5.5, whose price depends on prompt size, and any model whose ID was not confirmed on the pricing page. Add them in `.specpilot/prices.json`.
 - The mode in the `cost` report is the current mode, not the one the task ran with.
 - `mode` rewrites every `.claude/agents/*.md`, including agents that are not part of the workflow.
+- With a corrupt `.specpilot/prices.json`, `cost` reports a missing transcript folder or no messages in the window before the prices error, but no test pins that order.
 - Windows is not supported in v0.1 (development is on macOS and CI runs on Linux). `cost` and `mode` rely on Node's `readdirSync` returning names in sorted order, as it does on macOS and Linux; on Windows, `mode` could list the updated agent files in a different order, or name a different file when two are broken.
 - The transcript folder name follows Claude Code's current rule; if Claude Code changes it, `cost` reports the folder as missing.
 

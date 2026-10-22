@@ -45,6 +45,7 @@ import { readModeConfig, setMode } from './mode';
 import type { Mode } from './mode';
 import { initProject } from './init';
 import type { InitActionKind } from './init';
+import { formatReport, reportRows } from './report';
 import type { ToolUse } from './hooks';
 import type { Evidence, JestReport } from './tdd';
 
@@ -72,8 +73,6 @@ Commands:
   mode [standard|max]     Show the mode, or set the model of every project agent
   report                  Summarize cost and quality metrics
 `;
-
-const NOT_IMPLEMENTED = ['report'];
 
 function specLint(file: string | undefined): number {
   if (!file) {
@@ -662,6 +661,20 @@ function init(): number {
   return 0;
 }
 
+// Read-only: one row per task of specs/. Exit 2 means the report could not be built (a corrupt
+// state.json, hallucinations.json or prices file, or a model with no price), and nothing is printed to stdout.
+function report(): number {
+  let rows: ReturnType<typeof reportRows>;
+  try {
+    rows = reportRows(process.cwd());
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
+  for (const line of formatReport(rows)) console.log(line);
+  return 0;
+}
+
 function main([command, ...args]: string[]): number {
   if (command === '--help' || command === '-h') {
     console.log(HELP);
@@ -685,10 +698,7 @@ function main([command, ...args]: string[]): number {
   if (command === 'cost') return cost(args);
   if (command === 'mode') return mode(args);
   if (command === 'init') return init();
-  if (NOT_IMPLEMENTED.includes(command)) {
-    console.error(`"${command}" is not implemented yet`);
-    return 1;
-  }
+  if (command === 'report') return report();
   console.error(`Unknown command: ${command}`);
   return 1;
 }
