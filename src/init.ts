@@ -117,7 +117,7 @@ function packageWarnings(packages: string[]): string[] {
   }
   if (!packages.includes('specpilot')) {
     warnings.push(
-      'specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (npm i -D specpilot)',
+      'specpilot is not installed: the hooks run npx --no specpilot and block every edit until specpilot is installed (see the README: install it from a npm pack tarball)',
     );
   }
   return warnings;
